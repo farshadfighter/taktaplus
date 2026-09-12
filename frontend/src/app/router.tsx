@@ -4,6 +4,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { Shell } from "@/components/layout/Shell";
 import { LoginPage } from "@/modules/auth/LoginPage";
 import { DashboardPage } from "@/modules/dashboard/DashboardPage";
+import { DevicesPage } from "@/modules/devices/DevicesPage";
 import { LicenseActivationPage } from "@/modules/license/LicenseActivationPage";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: "devices", element: <DevicesPage /> },
       { path: "license", element: <LicenseActivationPage /> },
     ],
   },

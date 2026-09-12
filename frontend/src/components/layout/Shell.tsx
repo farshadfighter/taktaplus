@@ -18,6 +18,7 @@ export function Shell() {
         <h3>taktaplus</h3>
         <nav>
           <Link to="/">داشبورد</Link>
+          <Link to="/devices">دستگاه‌ها</Link>
           <Link to="/license">لایسنس</Link>
         </nav>
         <div style={{ marginTop: 24, fontSize: 12, color: "var(--text-muted)" }}>
