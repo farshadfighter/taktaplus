@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { Shell } from "@/components/layout/Shell";
 import { LoginPage } from "@/modules/auth/LoginPage";
+import { DeviceBackupsPage } from "@/modules/backups/DeviceBackupsPage";
 import { DashboardPage } from "@/modules/dashboard/DashboardPage";
 import { DevicesPage } from "@/modules/devices/DevicesPage";
 import { LicenseActivationPage } from "@/modules/license/LicenseActivationPage";
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: "devices", element: <DevicesPage /> },
+      { path: "devices/:deviceId/backups", element: <DeviceBackupsPage /> },
       { path: "license", element: <LicenseActivationPage /> },
     ],
   },

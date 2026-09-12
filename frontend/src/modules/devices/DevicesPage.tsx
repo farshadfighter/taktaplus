@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { apiClient } from "@/services/apiClient";
 import { Device, DeviceCreatePayload, DeviceTestResult, VendorType } from "@/modules/devices/types";
@@ -221,6 +222,9 @@ export function DevicesPage() {
                     >
                       {testingId === d.id ? "در حال تست..." : "تست اتصال"}
                     </button>
+                    <Link to={`/devices/${d.id}/backups`} className="btn" style={{ padding: "4px 10px", fontSize: 12 }}>
+                      بکاپ‌ها
+                    </Link>
                     <button
                       className="btn"
                       style={{ padding: "4px 10px", fontSize: 12, background: "var(--danger)" }}

@@ -4,6 +4,7 @@ individual model modules, wherever the full metadata is needed.
 """
 
 from app.domains.audit.models import AuditLog  # noqa: F401
+from app.domains.backups.models import Backup  # noqa: F401
 from app.domains.devices.models import Device  # noqa: F401
 from app.domains.identity.models import Role, User  # noqa: F401
 from app.domains.licensing.models import License, LicenseEvent  # noqa: F401

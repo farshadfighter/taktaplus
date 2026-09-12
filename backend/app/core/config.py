@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     db_backup_dir: str = "/var/backups/taktaplus"
     db_backup_retention_days: int = 30
 
+    # Per-device config backups (phase 2), stored encrypted in the database
+    # rather than on disk - see docs/backups.md.
+    device_backup_retention_count: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:

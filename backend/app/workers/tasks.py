@@ -8,6 +8,9 @@ from urllib.parse import urlparse
 
 from app.core.config import get_settings
 from app.db.session import SessionLocal
+from app.domains.backups.models import BackupSource
+from app.domains.backups.service import create_backup, prune_old_backups
+from app.domains.devices.service import list_devices
 from app.domains.licensing import service as licensing_service
 from app.workers.celery_app import celery_app
 
@@ -23,10 +26,10 @@ def run_license_heartbeat() -> None:
 
 @celery_app.task(name="app.workers.tasks.run_self_db_backup")
 def run_self_db_backup() -> str:
-    """pg_dump taktaplus's own database (not device backups - see
-    domains for device backup/restore, added in phase 2) to a local
-    directory with retention cleanup. This protects the license binding,
-    device credentials, and history if the management server's disk fails.
+    """pg_dump taktaplus's own database (not device config backups - see
+    run_scheduled_device_backups for those) to a local directory with
+    retention cleanup. This protects the license binding, device
+    credentials, and history if the management server's disk fails.
     """
     settings = get_settings()
     os.makedirs(settings.db_backup_dir, exist_ok=True)
@@ -60,3 +63,26 @@ def _cleanup_old_backups(directory: str, retention_days: int) -> None:
         mtime = datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
         if mtime < cutoff:
             os.remove(path)
+
+
+@celery_app.task(name="app.workers.tasks.run_scheduled_device_backups")
+def run_scheduled_device_backups() -> dict:
+    """Nightly config backup for every device, with per-device retention.
+    Failures for one device (unreachable, bad credentials) don't stop the
+    rest - each is recorded as a failed Backup row via create_backup, same
+    as a manual backup would be.
+    """
+    settings = get_settings()
+    db = SessionLocal()
+    results = {"succeeded": 0, "failed": 0}
+    try:
+        for device in list_devices(db):
+            backup = create_backup(db, device, actor="scheduler", source=BackupSource.SCHEDULED)
+            if backup.status.value == "success":
+                results["succeeded"] += 1
+            else:
+                results["failed"] += 1
+            prune_old_backups(db, device.id, settings.device_backup_retention_count)
+    finally:
+        db.close()
+    return results

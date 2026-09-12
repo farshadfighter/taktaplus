@@ -80,3 +80,92 @@ def test_fortiweb_driver_raises_on_failed_login():
 
     with pytest.raises(DeviceConnectionError):
         driver.test_connection()
+
+
+def test_fortigate_driver_backup_returns_raw_content():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v2/monitor/system/config/backup"
+        assert request.url.params["scope"] == "global"
+        return httpx.Response(200, content=b"config system global\nend\n")
+
+    driver = FortiGateDriver(
+        host="10.0.0.1", port=443, token="tok", verify_tls=False, transport=httpx.MockTransport(handler)
+    )
+
+    content = driver.backup()
+
+    assert content == b"config system global\nend\n"
+
+
+def test_fortigate_driver_backup_raises_on_empty_response():
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b""))
+    driver = FortiGateDriver(host="10.0.0.1", port=443, token="tok", verify_tls=False, transport=transport)
+
+    with pytest.raises(DeviceConnectionError):
+        driver.backup()
+
+
+def test_fortigate_driver_restore_uploads_multipart_file():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v2/monitor/system/config/restore"
+        assert b"config system global" in request.content
+        return httpx.Response(200)
+
+    driver = FortiGateDriver(
+        host="10.0.0.1", port=443, token="tok", verify_tls=False, transport=httpx.MockTransport(handler)
+    )
+
+    driver.restore(b"config system global\nend\n")  # should not raise
+
+
+def test_fortigate_driver_restore_raises_on_forbidden():
+    transport = httpx.MockTransport(lambda request: httpx.Response(403))
+    driver = FortiGateDriver(host="10.0.0.1", port=443, token="tok", verify_tls=False, transport=transport)
+
+    with pytest.raises(DeviceConnectionError):
+        driver.restore(b"config")
+
+
+def test_fortiweb_driver_backup_returns_raw_content():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/logincheck":
+            return httpx.Response(200, headers={"set-cookie": "ccsrftoken=abc123; Path=/"})
+        if request.url.path == "/api/v2.0/system/config/backup":
+            return httpx.Response(200, content=b"config system global\nend\n")
+        if request.url.path == "/logout":
+            return httpx.Response(200)
+        return httpx.Response(404)
+
+    driver = FortiWebDriver(
+        host="10.0.0.2",
+        port=443,
+        username="admin",
+        password="secret",
+        verify_tls=False,
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert driver.backup() == b"config system global\nend\n"
+
+
+def test_fortiweb_driver_restore_uploads_multipart_file():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/logincheck":
+            return httpx.Response(200, headers={"set-cookie": "ccsrftoken=abc123; Path=/"})
+        if request.url.path == "/api/v2.0/system/config/restore":
+            assert b"config system global" in request.content
+            return httpx.Response(200)
+        if request.url.path == "/logout":
+            return httpx.Response(200)
+        return httpx.Response(404)
+
+    driver = FortiWebDriver(
+        host="10.0.0.2",
+        port=443,
+        username="admin",
+        password="secret",
+        verify_tls=False,
+        transport=httpx.MockTransport(handler),
+    )
+
+    driver.restore(b"config system global\nend\n")  # should not raise

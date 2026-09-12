@@ -17,4 +17,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.run_self_db_backup",
         "schedule": crontab(hour=3, minute=0),
     },
+    "device-backups": {
+        "task": "app.workers.tasks.run_scheduled_device_backups",
+        "schedule": crontab(hour=2, minute=0),
+    },
 }

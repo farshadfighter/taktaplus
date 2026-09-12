@@ -18,11 +18,18 @@ class DeviceStatusInfo:
 
 
 class FortinetDriver:
-    """Common interface every vendor driver implements. Kept intentionally
-    tiny for phase 1 (connectivity test only) - phase 2 (backup/restore) and
-    phase 4 (signature/firmware push) will add methods here rather than
-    inventing a second driver abstraction.
+    """Common interface every vendor driver implements. Phase 4
+    (signature/firmware push) will add methods here rather than inventing a
+    second driver abstraction.
     """
 
     def test_connection(self) -> DeviceStatusInfo:
+        raise NotImplementedError
+
+    def backup(self) -> bytes:
+        """Return the full device configuration as raw bytes."""
+        raise NotImplementedError
+
+    def restore(self, content: bytes) -> None:
+        """Push a previously captured configuration back to the device."""
         raise NotImplementedError
