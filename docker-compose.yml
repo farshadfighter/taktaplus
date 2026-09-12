@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-taktaplus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taktaplus}
+      POSTGRES_DB: ${POSTGRES_DB:-taktaplus}
+    volumes:
+      - taktaplus_db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  mock-license-server:
+    build: ./dev/mock-license-server
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - master_key:/etc/taktaplus
+    depends_on:
+      - db
+      - redis
+      - mock-license-server
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    env_file: .env
+    volumes:
+      - master_key:/etc/taktaplus
+    depends_on:
+      - db
+      - redis
+
+  beat:
+    build: ./backend
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    env_file: .env
+    volumes:
+      - master_key:/etc/taktaplus
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      VITE_BACKEND_URL: http://backend:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  taktaplus_db:
+  master_key:
