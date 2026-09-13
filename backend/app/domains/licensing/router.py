@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.v1.deps import require_permission
+from app.api.v1.deps import get_current_user, require_permission
 from app.db.session import get_db
 from app.domains.licensing import service
 from app.domains.licensing.client import LicenseNotFound, LicenseServerError, LicenseSuspended
@@ -29,7 +29,7 @@ def activate_license(
 
 
 @router.get("/status", response_model=LicenseStatusOut)
-def license_status(db: Session = Depends(get_db)) -> LicenseStatusOut:
+def license_status(db: Session = Depends(get_db), _=Depends(get_current_user)) -> LicenseStatusOut:
     license_row = service.get_license(db)
     if license_row is None:
         return LicenseStatusOut(

@@ -105,13 +105,17 @@ def push_package_to_device(db: Session, device: Device, package: Package, *, act
     record = PushRecord(device_id=device.id, package_id=package.id, pushed_by=actor, status=PushStatus.SUCCESS)
 
     try:
-        with open(package.local_path, "rb") as fh:
-            content = fh.read()
-
         driver = get_driver(device)
         if device.vendor_type == VendorType.FORTIGATE:
+            # FortiGate never needs the file's bytes here: firmware pushes
+            # read the file themselves (see _push_to_fortigate) and signature
+            # pushes go via FTP relay with no content in the request at all -
+            # so avoid loading potentially large firmware images into memory
+            # for nothing.
             _push_to_fortigate(driver, package)
         else:
+            with open(package.local_path, "rb") as fh:
+                content = fh.read()
             _push_to_fortiweb(driver, package, content)
     except (DeviceConnectionError, OSError) as exc:
         record.status = PushStatus.FAILED

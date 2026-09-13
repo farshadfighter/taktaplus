@@ -14,6 +14,7 @@ service (SSL VPN) and a non-capable one (IPsec) at once.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -107,7 +108,7 @@ def _find_matching_active_challenge(db: Session, username: str, code: str) -> Ot
         )
     )
     for challenge in candidates:
-        if _aware(challenge.expires_at) > _now() and challenge.code_hash == code_hash:
+        if _aware(challenge.expires_at) > _now() and hmac.compare_digest(challenge.code_hash, code_hash):
             return challenge
     return None
 
@@ -157,7 +158,7 @@ def authenticate(db: Session, *, username: str, password: str, state_token: str 
         if challenge is None:
             return AuthResult(result="reject", reply_message="این درخواست منقضی شده یا نامعتبر است")
 
-        if challenge.code_hash == _hash_code(password):
+        if hmac.compare_digest(challenge.code_hash, _hash_code(password)):
             challenge.consumed = True
             db.commit()
             _reset_failures(db, user)
@@ -172,7 +173,9 @@ def authenticate(db: Session, *, username: str, password: str, state_token: str 
 
     # Fresh request, no state - could be a concatenated password+OTP (IPsec)
     # from a client that already received a code via an earlier attempt.
-    if len(password) > len(primary_password) and password.startswith(primary_password):
+    if len(password) > len(primary_password) and hmac.compare_digest(
+        password[: len(primary_password)], primary_password
+    ):
         remainder = password[len(primary_password):]
         challenge = _find_matching_active_challenge(db, username, remainder)
         if challenge is not None:
@@ -182,7 +185,7 @@ def authenticate(db: Session, *, username: str, password: str, state_token: str 
             return AuthResult(result="accept")
 
     # Exact primary password, nothing appended - start a new challenge.
-    if password == primary_password:
+    if hmac.compare_digest(password, primary_password):
         return _issue_challenge(db, user)
 
     _register_failure(db, user)
