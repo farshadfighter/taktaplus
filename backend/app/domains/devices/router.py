@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.deps import require_permission
 from app.db.session import get_db
 from app.domains.devices import service
-from app.domains.devices.schemas import DeviceCreate, DeviceOut, DeviceTestResult
+from app.domains.devices.schemas import DeviceCreate, DeviceOut, DeviceTestResult, SnmpConfigUpdate
 from app.domains.identity.models import User
 from app.domains.licensing.service import LicenseRequiredError
 
@@ -58,6 +58,18 @@ def delete_device(
 ) -> None:
     device = _get_device_or_404(db, device_id)
     service.delete_device(db, device, actor=user.username)
+
+
+@router.patch("/{device_id}/snmp", response_model=DeviceOut)
+def update_snmp_config(
+    device_id: uuid.UUID,
+    payload: SnmpConfigUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("devices:write")),
+) -> DeviceOut:
+    device = _get_device_or_404(db, device_id)
+    device = service.set_snmp_config(db, device, payload, actor=user.username)
+    return DeviceOut.model_validate(device)
 
 
 @router.post("/{device_id}/test-connection", response_model=DeviceTestResult)

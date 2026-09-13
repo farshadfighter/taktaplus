@@ -6,10 +6,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import encrypt_secret
+from app.domains.alerting.service import notify
 from app.domains.audit.service import record_audit_event
 from app.domains.devices.drivers import DeviceConnectionError, get_driver
 from app.domains.devices.models import Device, DeviceStatus, VendorType
-from app.domains.devices.schemas import DeviceCreate
+from app.domains.devices.schemas import DeviceCreate, SnmpConfigUpdate
 from app.domains.licensing.service import enforce_device_quota
 
 
@@ -47,6 +48,10 @@ def get_device(db: Session, device_id) -> Device | None:
     return db.get(Device, device_id)
 
 
+def find_device_by_host(db: Session, host: str) -> Device | None:
+    return db.scalar(select(Device).where(Device.host == host))
+
+
 def delete_device(db: Session, device: Device, *, actor: str) -> None:
     record_audit_event(db, actor=actor, action="device.delete", target=device.name, details=device.vendor_type.value)
     db.delete(device)
@@ -64,6 +69,7 @@ def test_connection(db: Session, device: Device, *, actor: str) -> Device:
         device.last_error = str(exc)
         db.commit()
         record_audit_event(db, actor=actor, action="device.test_connection.failed", target=device.name, details=str(exc))
+        notify(f"اتصال به {device.name} برقرار نشد", str(exc))
         db.refresh(device)
         return device
 
@@ -74,5 +80,20 @@ def test_connection(db: Session, device: Device, *, actor: str) -> Device:
     device.reported_hostname = info.hostname
     db.commit()
     record_audit_event(db, actor=actor, action="device.test_connection.success", target=device.name)
+    db.refresh(device)
+    return device
+
+
+def set_snmp_config(db: Session, device: Device, payload: SnmpConfigUpdate, *, actor: str) -> Device:
+    device.snmp_enabled = payload.enabled
+    device.snmp_port = payload.port
+    if payload.community:
+        device.encrypted_snmp_community = encrypt_secret(payload.community)
+    elif not payload.enabled:
+        device.encrypted_snmp_community = None
+    db.commit()
+    record_audit_event(
+        db, actor=actor, action="device.snmp_config.update", target=device.name, details=str(payload.enabled)
+    )
     db.refresh(device)
     return device

@@ -40,6 +40,27 @@ class Settings(BaseSettings):
     # rather than on disk - see docs/backups.md.
     device_backup_retention_count: int = 30
 
+    # SNMP monitoring (phase 3) - see docs/monitoring.md.
+    snmp_poll_interval_minutes: int = 5
+    snmp_poll_timeout_seconds: int = 5
+    snmp_trap_listen_host: str = "0.0.0.0"
+    snmp_trap_listen_port: int = 162
+    snmp_cpu_alert_threshold: int = 90
+    snmp_memory_alert_threshold: int = 90
+    backup_overdue_hours: int = 48
+
+    # Alerting (phase 3) - both optional; a channel with no config is simply
+    # skipped rather than erroring. Values live in env/.env, not the DB,
+    # since they're install-wide rather than per-device.
+    alert_email_smtp_host: str | None = None
+    alert_email_smtp_port: int = 587
+    alert_email_smtp_username: str | None = None
+    alert_email_smtp_password: str | None = None
+    alert_email_from: str | None = None
+    alert_email_to: str | None = None
+    alert_telegram_bot_token: str | None = None
+    alert_telegram_chat_id: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

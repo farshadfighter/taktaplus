@@ -21,4 +21,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.run_scheduled_device_backups",
         "schedule": crontab(hour=2, minute=0),
     },
+    "snmp-poll": {
+        "task": "app.workers.tasks.run_snmp_poll_all_devices",
+        "schedule": settings.snmp_poll_interval_minutes * 60,
+    },
 }

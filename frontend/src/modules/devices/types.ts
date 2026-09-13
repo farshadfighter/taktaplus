@@ -15,6 +15,8 @@ export interface Device {
   firmware_version: string;
   serial_number: string;
   reported_hostname: string;
+  snmp_enabled: boolean;
+  snmp_port: number;
   created_at: string;
 }
 

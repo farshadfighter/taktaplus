@@ -7,11 +7,14 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from app.core.config import get_settings
+from app.core.security import decrypt_secret
 from app.db.session import SessionLocal
 from app.domains.backups.models import BackupSource
 from app.domains.backups.service import create_backup, prune_old_backups
 from app.domains.devices.service import list_devices
 from app.domains.licensing import service as licensing_service
+from app.domains.monitoring.service import record_metric_sample, record_poll_failure
+from app.domains.monitoring.snmp_client import SnmpPollError, poll_device
 from app.workers.celery_app import celery_app
 
 
@@ -83,6 +86,38 @@ def run_scheduled_device_backups() -> dict:
             else:
                 results["failed"] += 1
             prune_old_backups(db, device.id, settings.device_backup_retention_count)
+    finally:
+        db.close()
+    return results
+
+
+@celery_app.task(name="app.workers.tasks.run_snmp_poll_all_devices")
+def run_snmp_poll_all_devices() -> dict:
+    """Poll every SNMP-enabled device for CPU/memory/session metrics. A
+    device that doesn't respond gets a critical alert (not just a skipped
+    row) since an unreachable device is itself worth knowing about,
+    independent of the REST-API-based connectivity check in phase 1.
+    """
+    settings = get_settings()
+    db = SessionLocal()
+    results = {"polled": 0, "failed": 0}
+    try:
+        for device in list_devices(db):
+            if not device.snmp_enabled or not device.encrypted_snmp_community:
+                continue
+
+            community = decrypt_secret(device.encrypted_snmp_community)
+            try:
+                metrics = poll_device(
+                    device.host, device.snmp_port, community, timeout=settings.snmp_poll_timeout_seconds
+                )
+            except SnmpPollError as exc:
+                record_poll_failure(db, device, str(exc))
+                results["failed"] += 1
+                continue
+
+            record_metric_sample(db, device, metrics)
+            results["polled"] += 1
     finally:
         db.close()
     return results

@@ -7,6 +7,8 @@ import { DeviceBackupsPage } from "@/modules/backups/DeviceBackupsPage";
 import { DashboardPage } from "@/modules/dashboard/DashboardPage";
 import { DevicesPage } from "@/modules/devices/DevicesPage";
 import { LicenseActivationPage } from "@/modules/license/LicenseActivationPage";
+import { DeviceMonitoringPage } from "@/modules/monitoring/DeviceMonitoringPage";
+import { FleetStatusPage } from "@/modules/reports/FleetStatusPage";
 import { useAuthStore } from "@/stores/authStore";
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -28,6 +30,8 @@ export const router = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: "devices", element: <DevicesPage /> },
       { path: "devices/:deviceId/backups", element: <DeviceBackupsPage /> },
+      { path: "devices/:deviceId/monitoring", element: <DeviceMonitoringPage /> },
+      { path: "reports", element: <FleetStatusPage /> },
       { path: "license", element: <LicenseActivationPage /> },
     ],
   },

@@ -56,6 +56,18 @@ services:
       - db
       - redis
 
+  snmp-trap-receiver:
+    build: ./backend
+    restart: unless-stopped
+    command: python -m app.workers.snmp_trap_receiver
+    env_file: .env
+    volumes:
+      - master_key:/etc/taktaplus
+    depends_on:
+      - db
+    ports:
+      - "162:162/udp"
+
   frontend:
     build: ./frontend
     restart: unless-stopped

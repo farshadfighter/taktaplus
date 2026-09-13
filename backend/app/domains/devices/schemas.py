@@ -43,6 +43,8 @@ class DeviceOut(BaseModel):
     firmware_version: str
     serial_number: str
     reported_hostname: str
+    snmp_enabled: bool
+    snmp_port: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -55,3 +57,15 @@ class DeviceTestResult(BaseModel):
     serial_number: str = ""
     reported_hostname: str = ""
     error: str = Field(default="")
+
+
+class SnmpConfigUpdate(BaseModel):
+    enabled: bool
+    port: int = 161
+    community: str | None = None
+
+    @model_validator(mode="after")
+    def _require_community_when_enabling(self) -> "SnmpConfigUpdate":
+        if self.enabled and not self.community:
+            raise ValueError("برای فعال‌سازی SNMP باید community رشته وارد شود")
+        return self

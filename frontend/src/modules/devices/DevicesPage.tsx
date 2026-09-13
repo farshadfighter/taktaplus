@@ -225,6 +225,9 @@ export function DevicesPage() {
                     <Link to={`/devices/${d.id}/backups`} className="btn" style={{ padding: "4px 10px", fontSize: 12 }}>
                       بکاپ‌ها
                     </Link>
+                    <Link to={`/devices/${d.id}/monitoring`} className="btn" style={{ padding: "4px 10px", fontSize: 12 }}>
+                      مانیتورینگ
+                    </Link>
                     <button
                       className="btn"
                       style={{ padding: "4px 10px", fontSize: 12, background: "var(--danger)" }}

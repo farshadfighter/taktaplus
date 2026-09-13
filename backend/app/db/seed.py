@@ -1,7 +1,10 @@
 """First-run seed: default roles + a one-time bootstrap super admin.
 
-Run with `python -m app.db.seed`. Idempotent - safe to run again, it only
-creates rows that don't exist yet.
+Run with `python -m app.db.seed`. Idempotent - the bootstrap admin is only
+created once, but role permissions are re-synced to DEFAULT_ROLES on every
+run, so re-running after upgrading to a phase that adds new permission
+strings (e.g. reports:read in phase 3) picks them up without a manual
+migration - custom-named roles an operator created by hand aren't touched.
 """
 
 from __future__ import annotations
@@ -26,6 +29,8 @@ def seed() -> None:
                 role = Role(name=name, permissions=permissions)
                 db.add(role)
                 db.flush()
+            else:
+                role.permissions = permissions
             role_rows[name] = role
 
         existing_admin = db.scalar(select(User).where(User.username == "admin"))

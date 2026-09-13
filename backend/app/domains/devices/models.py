@@ -50,6 +50,12 @@ class Device(Base):
     serial_number: Mapped[str] = mapped_column(String(64), default="")
     reported_hostname: Mapped[str] = mapped_column(String(256), default="")
 
+    # SNMPv2c only for phase 3 - see docs/monitoring.md for why v3 is a
+    # documented fast-follow rather than half-implemented here.
+    snmp_enabled: Mapped[bool] = mapped_column(default=False)
+    snmp_port: Mapped[int] = mapped_column(Integer, default=161)
+    encrypted_snmp_community: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

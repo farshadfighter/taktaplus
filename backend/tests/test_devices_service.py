@@ -5,7 +5,7 @@ import pytest
 from app.core.security import decrypt_secret
 from app.domains.devices import service
 from app.domains.devices.models import VendorType
-from app.domains.devices.schemas import DeviceCreate
+from app.domains.devices.schemas import DeviceCreate, SnmpConfigUpdate
 from app.domains.licensing.models import License
 from app.domains.licensing.service import LicenseRequiredError
 
@@ -102,3 +102,39 @@ def test_device_create_schema_requires_matching_credentials():
 
     with pytest.raises(ValueError):
         DeviceCreate(name="waf1", vendor_type=VendorType.FORTIWEB, host="10.0.0.2", username="a")
+
+
+def test_set_snmp_config_enables_and_encrypts_community(db_session):
+    _grant_license(db_session)
+    device = service.create_device(
+        db_session,
+        DeviceCreate(name="fw1", vendor_type=VendorType.FORTIGATE, host="10.0.0.1", api_token="x"),
+        actor="tester",
+    )
+
+    updated = service.set_snmp_config(
+        db_session, device, SnmpConfigUpdate(enabled=True, port=161, community="public"), actor="tester"
+    )
+
+    assert updated.snmp_enabled is True
+    assert decrypt_secret(updated.encrypted_snmp_community) == "public"
+
+
+def test_snmp_config_update_requires_community_when_enabling():
+    with pytest.raises(ValueError):
+        SnmpConfigUpdate(enabled=True)
+
+
+def test_set_snmp_config_disable_clears_community(db_session):
+    _grant_license(db_session)
+    device = service.create_device(
+        db_session,
+        DeviceCreate(name="fw1", vendor_type=VendorType.FORTIGATE, host="10.0.0.1", api_token="x"),
+        actor="tester",
+    )
+    service.set_snmp_config(db_session, device, SnmpConfigUpdate(enabled=True, community="public"), actor="tester")
+
+    updated = service.set_snmp_config(db_session, device, SnmpConfigUpdate(enabled=False), actor="tester")
+
+    assert updated.snmp_enabled is False
+    assert updated.encrypted_snmp_community is None
