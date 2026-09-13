@@ -13,11 +13,14 @@ DEFAULT_ROLES: dict[str, list[str]] = {
         "backups:create",
         "backups:restore",
         "reports:read",
+        "packages:read",
+        "packages:manage",
     ],
     "viewer": [
         "devices:read",
         "backups:read",
         "reports:read",
+        "packages:read",
     ],
 }
 

@@ -19,6 +19,7 @@ export function Shell() {
         <nav>
           <Link to="/">داشبورد</Link>
           <Link to="/devices">دستگاه‌ها</Link>
+          <Link to="/packages">سیگنیچر و فرم‌ور</Link>
           <Link to="/reports">گزارش وضعیت</Link>
           <Link to="/license">لایسنس</Link>
         </nav>

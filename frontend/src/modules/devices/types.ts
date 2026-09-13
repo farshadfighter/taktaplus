@@ -17,6 +17,8 @@ export interface Device {
   reported_hostname: string;
   snmp_enabled: boolean;
   snmp_port: number;
+  ssh_port: number;
+  ssh_username: string | null;
   created_at: string;
 }
 

@@ -28,6 +28,11 @@ from app.domains.devices.drivers.base import DeviceConnectionError, DeviceStatus
 STATUS_ENDPOINT = "/api/v2.0/system/status"
 BACKUP_ENDPOINT = "/api/v2.0/system/config/backup"
 RESTORE_ENDPOINT = "/api/v2.0/system/config/restore"
+# Same guess-by-analogy caveat as above: mirrors the GUI path documented in
+# FortiWeb's admin guide ("Uploading signature updates" -> System > Config >
+# FortiGuard > License Information), not a confirmed REST endpoint.
+SIGNATURE_UPLOAD_ENDPOINT = "/api/v2.0/system/fortiguard/signature/update"
+FIRMWARE_UPLOAD_ENDPOINT = "/api/v2.0/system/firmware/upgrade"
 
 
 class FortiWebDriver(FortinetDriver):
@@ -108,6 +113,38 @@ class FortiWebDriver(FortinetDriver):
                 )
         except httpx.HTTPError as exc:
             raise DeviceConnectionError(f"ریستور روی FortiWeb ناموفق بود: {exc}") from exc
+
+        if response.status_code != 200:
+            raise DeviceConnectionError(f"FortiWeb پاسخ غیرمنتظره {response.status_code} برگرداند")
+
+    def push_signature(self, content: bytes, *, filename: str = "signature.pkg") -> None:
+        """Direct upload - unlike FortiGate, FortiWeb has no FTP-pull CLI
+        path for signatures, so there's no relay involved here at all.
+        """
+        try:
+            with self._session() as (client, csrf_token):
+                response = client.post(
+                    SIGNATURE_UPLOAD_ENDPOINT,
+                    headers={"X-CSRFTOKEN": csrf_token},
+                    files={"file": (filename, content, "application/octet-stream")},
+                )
+        except httpx.HTTPError as exc:
+            raise DeviceConnectionError(f"آپلود سیگنیچر به FortiWeb ناموفق بود: {exc}") from exc
+
+        if response.status_code != 200:
+            raise DeviceConnectionError(f"FortiWeb پاسخ غیرمنتظره {response.status_code} برگرداند")
+
+    def push_firmware(self, content: bytes, *, filename: str = "firmware.out") -> None:
+        try:
+            with self._session() as (client, csrf_token):
+                response = client.post(
+                    FIRMWARE_UPLOAD_ENDPOINT,
+                    headers={"X-CSRFTOKEN": csrf_token},
+                    files={"file": (filename, content, "application/octet-stream")},
+                    timeout=300.0,
+                )
+        except httpx.HTTPError as exc:
+            raise DeviceConnectionError(f"آپلود فرم‌ور به FortiWeb ناموفق بود: {exc}") from exc
 
         if response.status_code != 200:
             raise DeviceConnectionError(f"FortiWeb پاسخ غیرمنتظره {response.status_code} برگرداند")

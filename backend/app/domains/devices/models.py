@@ -56,6 +56,15 @@ class Device(Base):
     snmp_port: Mapped[int] = mapped_column(Integer, default=161)
     encrypted_snmp_community: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # FortiGate only, phase 4: SSH admin credentials used to run `execute
+    # restore ...` CLI commands for offline signature distribution - the
+    # REST API has no equivalent for this. Separate from encrypted_api_token
+    # since SSH login and the REST API token are different admin surfaces.
+    # See docs/signature-distribution.md.
+    ssh_port: Mapped[int] = mapped_column(Integer, default=22)
+    ssh_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    encrypted_ssh_password: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

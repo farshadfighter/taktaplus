@@ -45,6 +45,8 @@ class DeviceOut(BaseModel):
     reported_hostname: str
     snmp_enabled: bool
     snmp_port: int
+    ssh_port: int
+    ssh_username: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -69,3 +71,13 @@ class SnmpConfigUpdate(BaseModel):
         if self.enabled and not self.community:
             raise ValueError("برای فعال‌سازی SNMP باید community رشته وارد شود")
         return self
+
+
+class SshConfigUpdate(BaseModel):
+    """FortiGate-only: SSH admin credentials for phase 4 signature/firmware
+    push (execute restore ... over CLI - no REST equivalent exists).
+    """
+
+    port: int = 22
+    username: str
+    password: str

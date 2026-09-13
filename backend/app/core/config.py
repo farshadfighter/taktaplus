@@ -61,6 +61,27 @@ class Settings(BaseSettings):
     alert_telegram_bot_token: str | None = None
     alert_telegram_chat_id: str | None = None
 
+    # Offline signature/firmware distribution (phase 4) - see
+    # docs/signature-distribution.md.
+    packages_root: str = "/var/lib/taktaplus/packages"
+
+    # The internal FTP relay FortiGate devices pull signature packages from
+    # (taktaplus is both an FTP *client* to the upstream source above, and
+    # an FTP *server* to its own managed FortiGates). advertised_host is
+    # what devices are told to connect to - may differ from bind_host if
+    # NAT/multiple interfaces are involved.
+    ftp_relay_bind_host: str = "0.0.0.0"
+    ftp_relay_port: int = 21
+    ftp_relay_advertised_host: str | None = None
+    ftp_relay_username: str = "taktaplus-relay"
+    ftp_relay_password: str | None = None
+    # FTP PASV data connections otherwise use OS-ephemeral ports, which is
+    # fine on a flat management LAN but breaks if a firewall sits between
+    # taktaplus and the FortiGates - pin a narrow range and open exactly
+    # those ports (plus ftp_relay_port) on that firewall.
+    ftp_relay_passive_port_min: int = 60000
+    ftp_relay_passive_port_max: int = 60020
+
 
 @lru_cache
 def get_settings() -> Settings:

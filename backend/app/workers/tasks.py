@@ -12,6 +12,7 @@ from app.db.session import SessionLocal
 from app.domains.backups.models import BackupSource
 from app.domains.backups.service import create_backup, prune_old_backups
 from app.domains.devices.service import list_devices
+from app.domains.distribution.ftp_source import FtpSyncError, sync_from_ftp
 from app.domains.licensing import service as licensing_service
 from app.domains.monitoring.service import record_metric_sample, record_poll_failure
 from app.domains.monitoring.snmp_client import SnmpPollError, poll_device
@@ -121,3 +122,15 @@ def run_snmp_poll_all_devices() -> dict:
     finally:
         db.close()
     return results
+
+
+@celery_app.task(name="app.workers.tasks.run_ftp_package_sync")
+def run_ftp_package_sync() -> dict:
+    settings = get_settings()
+    db = SessionLocal()
+    try:
+        return sync_from_ftp(db, packages_root=settings.packages_root)
+    except FtpSyncError as exc:
+        return {"error": str(exc)}
+    finally:
+        db.close()

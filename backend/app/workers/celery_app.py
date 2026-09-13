@@ -25,4 +25,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.run_snmp_poll_all_devices",
         "schedule": settings.snmp_poll_interval_minutes * 60,
     },
+    "ftp-package-sync": {
+        "task": "app.workers.tasks.run_ftp_package_sync",
+        "schedule": crontab(hour=1, minute=0),
+    },
 }

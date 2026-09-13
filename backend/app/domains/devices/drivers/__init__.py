@@ -15,6 +15,9 @@ def get_driver(device: Device) -> FortinetDriver:
             token=decrypt_secret(device.encrypted_api_token),
             verify_tls=device.verify_tls,
             vdom=device.vdom,
+            ssh_port=device.ssh_port,
+            ssh_username=device.ssh_username,
+            ssh_password=decrypt_secret(device.encrypted_ssh_password) if device.encrypted_ssh_password else None,
         )
     if device.vendor_type == VendorType.FORTIWEB:
         return FortiWebDriver(

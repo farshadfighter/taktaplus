@@ -169,3 +169,201 @@ def test_fortiweb_driver_restore_uploads_multipart_file():
     )
 
     driver.restore(b"config system global\nend\n")  # should not raise
+
+
+class StubShell:
+    """Serves banner_response until send() is called, then switches to
+    post_send_response - mimics a real CLI session where the login banner
+    arrives before any command is sent, and the command's own output only
+    arrives after it.
+    """
+
+    def __init__(self, *, banner_response: bytes, post_send_response: bytes):
+        self._banner_response = banner_response
+        self._post_send_response = post_send_response
+        self._sent = False
+        self.sent: list[str] = []
+
+    def send(self, data: str) -> None:
+        self.sent.append(data)
+        self._sent = True
+
+    def recv_ready(self) -> bool:
+        return bool(self._banner_response) or (self._sent and bool(self._post_send_response))
+
+    def recv(self, n: int) -> bytes:
+        if self._banner_response:
+            chunk, self._banner_response = self._banner_response, b""
+            return chunk
+        if self._sent and self._post_send_response:
+            chunk, self._post_send_response = self._post_send_response, b""
+            return chunk
+        return b""
+
+
+class StubSSHClient:
+    def __init__(self, *, banner_response: bytes = b"FGT-1 # ", post_send_response: bytes = b""):
+        self._banner_response = banner_response
+        self._post_send_response = post_send_response
+        self.closed = False
+
+    def set_missing_host_key_policy(self, policy) -> None:
+        pass
+
+    def connect(self, host, port, username, password, timeout) -> None:
+        pass
+
+    def invoke_shell(self) -> StubShell:
+        return StubShell(banner_response=self._banner_response, post_send_response=self._post_send_response)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class RaisingSSHClient:
+    def set_missing_host_key_policy(self, policy) -> None:
+        pass
+
+    def connect(self, *a, **k):
+        import paramiko
+
+        raise paramiko.SSHException("auth failed")
+
+
+def test_fortigate_push_signature_via_ftp_success():
+    factory = lambda: StubSSHClient(post_send_response=b"Command executed successfully\r\nFGT-1 # ")  # noqa: E731
+    driver = FortiGateDriver(
+        host="10.0.0.1",
+        port=443,
+        token="tok",
+        verify_tls=False,
+        ssh_username="admin",
+        ssh_password="pw",
+        ssh_client_factory=factory,
+    )
+
+    output = driver.push_signature_via_ftp(
+        package_type="ips",
+        filename="ips.pkg",
+        relay_host="10.0.0.50",
+        relay_port=21,
+        relay_username="relay",
+        relay_password="relaypw",
+        banner_idle_seconds=0.1,
+        banner_max_seconds=0.3,
+        response_idle_seconds=0.1,
+        response_max_seconds=0.3,
+    )
+
+    assert "Command executed successfully" in output
+
+
+def test_fortigate_push_signature_via_ftp_detects_failure_in_output():
+    factory = lambda: StubSSHClient(post_send_response=b"Error: could not connect to FTP server\r\n")  # noqa: E731
+    driver = FortiGateDriver(
+        host="10.0.0.1",
+        port=443,
+        token="tok",
+        verify_tls=False,
+        ssh_username="admin",
+        ssh_password="pw",
+        ssh_client_factory=factory,
+    )
+
+    with pytest.raises(DeviceConnectionError):
+        driver.push_signature_via_ftp(
+            package_type="ips",
+            filename="ips.pkg",
+            relay_host="10.0.0.50",
+            relay_port=21,
+            relay_username="relay",
+            relay_password="relaypw",
+            banner_idle_seconds=0.1,
+            banner_max_seconds=0.3,
+            response_idle_seconds=0.1,
+            response_max_seconds=0.3,
+        )
+
+
+def test_fortigate_push_signature_via_ftp_requires_ssh_credentials():
+    driver = FortiGateDriver(host="10.0.0.1", port=443, token="tok", verify_tls=False)
+
+    with pytest.raises(DeviceConnectionError):
+        driver.push_signature_via_ftp(
+            package_type="ips", filename="ips.pkg", relay_host="h", relay_port=21, relay_username="u", relay_password="p"
+        )
+
+
+def test_fortigate_push_signature_via_ftp_raises_on_ssh_connect_failure():
+    driver = FortiGateDriver(
+        host="10.0.0.1",
+        port=443,
+        token="tok",
+        verify_tls=False,
+        ssh_username="admin",
+        ssh_password="wrong",
+        ssh_client_factory=RaisingSSHClient,
+    )
+
+    with pytest.raises(DeviceConnectionError):
+        driver.push_signature_via_ftp(
+            package_type="ips", filename="ips.pkg", relay_host="h", relay_port=21, relay_username="u", relay_password="p"
+        )
+
+
+def test_fortigate_push_firmware_success():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v2/monitor/system/firmware/upgrade"
+        body = request.read()
+        assert b"file_content" in body
+        return httpx.Response(200, json={"status": "success"})
+
+    driver = FortiGateDriver(
+        host="10.0.0.1", port=443, token="tok", verify_tls=False, transport=httpx.MockTransport(handler)
+    )
+
+    driver.push_firmware(b"fake-firmware-image")  # should not raise
+
+
+def test_fortiweb_push_signature_success():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/logincheck":
+            return httpx.Response(200, headers={"set-cookie": "ccsrftoken=abc123; Path=/"})
+        if request.url.path == "/api/v2.0/system/fortiguard/signature/update":
+            return httpx.Response(200, json={"status": "success"})
+        if request.url.path == "/logout":
+            return httpx.Response(200)
+        return httpx.Response(404)
+
+    driver = FortiWebDriver(
+        host="10.0.0.2",
+        port=443,
+        username="admin",
+        password="secret",
+        verify_tls=False,
+        transport=httpx.MockTransport(handler),
+    )
+
+    driver.push_signature(b"fake-sig-package")  # should not raise
+
+
+def test_fortiweb_push_firmware_success():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/logincheck":
+            return httpx.Response(200, headers={"set-cookie": "ccsrftoken=abc123; Path=/"})
+        if request.url.path == "/api/v2.0/system/firmware/upgrade":
+            return httpx.Response(200, json={"status": "success"})
+        if request.url.path == "/logout":
+            return httpx.Response(200)
+        return httpx.Response(404)
+
+    driver = FortiWebDriver(
+        host="10.0.0.2",
+        port=443,
+        username="admin",
+        password="secret",
+        verify_tls=False,
+        transport=httpx.MockTransport(handler),
+    )
+
+    driver.push_firmware(b"fake-firmware-image")  # should not raise

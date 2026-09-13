@@ -5,7 +5,7 @@ import pytest
 from app.core.security import decrypt_secret
 from app.domains.devices import service
 from app.domains.devices.models import VendorType
-from app.domains.devices.schemas import DeviceCreate, SnmpConfigUpdate
+from app.domains.devices.schemas import DeviceCreate, SnmpConfigUpdate, SshConfigUpdate
 from app.domains.licensing.models import License
 from app.domains.licensing.service import LicenseRequiredError
 
@@ -138,3 +138,20 @@ def test_set_snmp_config_disable_clears_community(db_session):
 
     assert updated.snmp_enabled is False
     assert updated.encrypted_snmp_community is None
+
+
+def test_set_ssh_config_encrypts_password(db_session):
+    _grant_license(db_session)
+    device = service.create_device(
+        db_session,
+        DeviceCreate(name="fw1", vendor_type=VendorType.FORTIGATE, host="10.0.0.1", api_token="x"),
+        actor="tester",
+    )
+
+    updated = service.set_ssh_config(
+        db_session, device, SshConfigUpdate(port=2222, username="admin", password="sshpw"), actor="tester"
+    )
+
+    assert updated.ssh_port == 2222
+    assert updated.ssh_username == "admin"
+    assert decrypt_secret(updated.encrypted_ssh_password) == "sshpw"

@@ -27,6 +27,7 @@ services:
     env_file: .env
     volumes:
       - master_key:/etc/taktaplus
+      - packages_data:/var/lib/taktaplus/packages
     depends_on:
       - db
       - redis
@@ -41,6 +42,7 @@ services:
     env_file: .env
     volumes:
       - master_key:/etc/taktaplus
+      - packages_data:/var/lib/taktaplus/packages
     depends_on:
       - db
       - redis
@@ -68,6 +70,18 @@ services:
     ports:
       - "162:162/udp"
 
+  ftp-relay:
+    build: ./backend
+    restart: unless-stopped
+    command: python -m app.workers.ftp_relay_server
+    env_file: .env
+    volumes:
+      - master_key:/etc/taktaplus
+      - packages_data:/var/lib/taktaplus/packages
+    ports:
+      - "21:21"
+      - "60000-60020:60000-60020"
+
   frontend:
     build: ./frontend
     restart: unless-stopped
@@ -81,3 +95,4 @@ services:
 volumes:
   taktaplus_db:
   master_key:
+  packages_data:

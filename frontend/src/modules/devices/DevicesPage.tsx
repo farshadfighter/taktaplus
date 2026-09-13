@@ -213,7 +213,7 @@ export function DevicesPage() {
                   </td>
                   <td style={{ padding: 8, color: STATUS_COLORS[d.status] }}>{STATUS_LABELS[d.status]}</td>
                   <td style={{ padding: 8 }}>{d.firmware_version || "-"}</td>
-                  <td style={{ padding: 8, display: "flex", gap: 8 }}>
+                  <td style={{ padding: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button
                       className="btn"
                       style={{ padding: "4px 10px", fontSize: 12 }}
@@ -227,6 +227,9 @@ export function DevicesPage() {
                     </Link>
                     <Link to={`/devices/${d.id}/monitoring`} className="btn" style={{ padding: "4px 10px", fontSize: 12 }}>
                       مانیتورینگ
+                    </Link>
+                    <Link to={`/devices/${d.id}/push`} className="btn" style={{ padding: "4px 10px", fontSize: 12 }}>
+                      سیگنیچر/فرم‌ور
                     </Link>
                     <button
                       className="btn"

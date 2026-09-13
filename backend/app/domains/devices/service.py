@@ -10,7 +10,7 @@ from app.domains.alerting.service import notify
 from app.domains.audit.service import record_audit_event
 from app.domains.devices.drivers import DeviceConnectionError, get_driver
 from app.domains.devices.models import Device, DeviceStatus, VendorType
-from app.domains.devices.schemas import DeviceCreate, SnmpConfigUpdate
+from app.domains.devices.schemas import DeviceCreate, SnmpConfigUpdate, SshConfigUpdate
 from app.domains.licensing.service import enforce_device_quota
 
 
@@ -95,5 +95,15 @@ def set_snmp_config(db: Session, device: Device, payload: SnmpConfigUpdate, *, a
     record_audit_event(
         db, actor=actor, action="device.snmp_config.update", target=device.name, details=str(payload.enabled)
     )
+    db.refresh(device)
+    return device
+
+
+def set_ssh_config(db: Session, device: Device, payload: SshConfigUpdate, *, actor: str) -> Device:
+    device.ssh_port = payload.port
+    device.ssh_username = payload.username
+    device.encrypted_ssh_password = encrypt_secret(payload.password)
+    db.commit()
+    record_audit_event(db, actor=actor, action="device.ssh_config.update", target=device.name)
     db.refresh(device)
     return device
