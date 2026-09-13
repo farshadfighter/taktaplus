@@ -29,4 +29,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.run_ftp_package_sync",
         "schedule": crontab(hour=1, minute=0),
     },
+    "prune-expired-otp-challenges": {
+        "task": "app.workers.tasks.run_prune_expired_otp_challenges",
+        "schedule": crontab(hour=4, minute=0),
+    },
 }

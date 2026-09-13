@@ -10,6 +10,9 @@ import { PackagesPage } from "@/modules/distribution/PackagesPage";
 import { DevicesPage } from "@/modules/devices/DevicesPage";
 import { LicenseActivationPage } from "@/modules/license/LicenseActivationPage";
 import { DeviceMonitoringPage } from "@/modules/monitoring/DeviceMonitoringPage";
+import { RadiusClientsPage } from "@/modules/radius/RadiusClientsPage";
+import { SmsGatewayPage } from "@/modules/radius/SmsGatewayPage";
+import { TwoFactorUsersPage } from "@/modules/radius/TwoFactorUsersPage";
 import { FleetStatusPage } from "@/modules/reports/FleetStatusPage";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -35,6 +38,9 @@ export const router = createBrowserRouter([
       { path: "devices/:deviceId/monitoring", element: <DeviceMonitoringPage /> },
       { path: "devices/:deviceId/push", element: <DevicePushPage /> },
       { path: "packages", element: <PackagesPage /> },
+      { path: "radius/users", element: <TwoFactorUsersPage /> },
+      { path: "radius/clients", element: <RadiusClientsPage /> },
+      { path: "radius/sms-gateway", element: <SmsGatewayPage /> },
       { path: "reports", element: <FleetStatusPage /> },
       { path: "license", element: <LicenseActivationPage /> },
     ],

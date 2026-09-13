@@ -20,6 +20,9 @@ export function Shell() {
           <Link to="/">داشبورد</Link>
           <Link to="/devices">دستگاه‌ها</Link>
           <Link to="/packages">سیگنیچر و فرم‌ور</Link>
+          <Link to="/radius/users">کاربران احراز هویت پیامکی</Link>
+          <Link to="/radius/clients">کلاینت‌های RADIUS</Link>
+          <Link to="/radius/sms-gateway">سرویس پیامکی</Link>
           <Link to="/reports">گزارش وضعیت</Link>
           <Link to="/license">لایسنس</Link>
         </nav>

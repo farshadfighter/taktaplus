@@ -82,6 +82,16 @@ class Settings(BaseSettings):
     ftp_relay_passive_port_min: int = 60000
     ftp_relay_passive_port_max: int = 60020
 
+    # SMS-based two-factor RADIUS server (phase 5) - see docs/radius-2fa.md.
+    radius_listen_host: str = "0.0.0.0"
+    radius_auth_port: int = 1812
+    otp_length: int = 5
+    otp_expiry_seconds: int = 120
+    otp_max_attempts_per_challenge: int = 3
+    otp_sms_rate_limit_per_hour: int = 5
+    otp_lockout_threshold: int = 5
+    otp_lockout_minutes: int = 15
+
 
 @lru_cache
 def get_settings() -> Settings:

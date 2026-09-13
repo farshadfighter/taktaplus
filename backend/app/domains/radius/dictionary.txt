@@ -1,0 +1,15 @@
+# Minimal RADIUS dictionary (RFC 2865 attribute numbers - these are part of
+# the public protocol spec, not vendor-specific) covering only what
+# taktaplus's RADIUS server actually uses. pyrad needs a dictionary file to
+# encode/decode attributes; this isn't the full FreeRADIUS dictionary
+# because we don't need it.
+ATTRIBUTE	User-Name		1	string
+ATTRIBUTE	User-Password		2	string
+ATTRIBUTE	NAS-IP-Address		4	ipaddr
+ATTRIBUTE	NAS-Port		5	integer
+ATTRIBUTE	Service-Type		6	integer
+ATTRIBUTE	Reply-Message		18	string
+ATTRIBUTE	State			24	octets
+ATTRIBUTE	Class			25	octets
+ATTRIBUTE	NAS-Identifier		32	string
+ATTRIBUTE	Calling-Station-Id	31	string

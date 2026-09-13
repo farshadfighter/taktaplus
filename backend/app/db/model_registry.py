@@ -10,5 +10,6 @@ from app.domains.distribution.models import FtpSourceConfig, Package, PushRecord
 from app.domains.identity.models import Role, User  # noqa: F401
 from app.domains.licensing.models import License, LicenseEvent  # noqa: F401
 from app.domains.monitoring.models import SnmpAlert, SnmpMetricSample  # noqa: F401
+from app.domains.radius.models import OtpChallenge, RadiusClient, SmsGatewayConfig, TwoFactorUser  # noqa: F401
 from app.domains.self_update.models import UpdateHistory  # noqa: F401
 from app.db.base import Base  # noqa: F401

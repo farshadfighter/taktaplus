@@ -16,6 +16,7 @@ from app.domains.distribution.ftp_source import FtpSyncError, sync_from_ftp
 from app.domains.licensing import service as licensing_service
 from app.domains.monitoring.service import record_metric_sample, record_poll_failure
 from app.domains.monitoring.snmp_client import SnmpPollError, poll_device
+from app.domains.radius.admin_service import prune_expired_challenges
 from app.workers.celery_app import celery_app
 
 
@@ -132,5 +133,14 @@ def run_ftp_package_sync() -> dict:
         return sync_from_ftp(db, packages_root=settings.packages_root)
     except FtpSyncError as exc:
         return {"error": str(exc)}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.workers.tasks.run_prune_expired_otp_challenges")
+def run_prune_expired_otp_challenges() -> int:
+    db = SessionLocal()
+    try:
+        return prune_expired_challenges(db)
     finally:
         db.close()

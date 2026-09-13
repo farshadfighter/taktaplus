@@ -17,3 +17,4 @@ pysnmp==4.4.12
 pyasn1==0.4.8
 paramiko==4.0.0
 pyftpdlib==2.2.0
+pyrad==2.5.4

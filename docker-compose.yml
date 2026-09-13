@@ -82,6 +82,18 @@ services:
       - "21:21"
       - "60000-60020:60000-60020"
 
+  radius-server:
+    build: ./backend
+    restart: unless-stopped
+    command: python -m app.workers.radius_server
+    env_file: .env
+    volumes:
+      - master_key:/etc/taktaplus
+    depends_on:
+      - db
+    ports:
+      - "1812:1812/udp"
+
   frontend:
     build: ./frontend
     restart: unless-stopped

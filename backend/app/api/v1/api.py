@@ -7,6 +7,7 @@ from app.domains.distribution.router import router as distribution_router
 from app.domains.identity.router import router as identity_router
 from app.domains.licensing.router import router as licensing_router
 from app.domains.monitoring.router import router as monitoring_router
+from app.domains.radius.router import router as radius_router
 from app.domains.reporting.router import router as reporting_router
 from app.domains.self_update.router import router as self_update_router
 
@@ -18,5 +19,6 @@ api_router.include_router(backups_router)
 api_router.include_router(monitoring_router)
 api_router.include_router(reporting_router)
 api_router.include_router(distribution_router)
+api_router.include_router(radius_router)
 api_router.include_router(diagnostics_router)
 api_router.include_router(self_update_router)
