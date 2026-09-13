@@ -11,7 +11,7 @@ from app.domains.audit.service import record_audit_event
 from app.domains.devices.drivers import DeviceConnectionError, get_driver
 from app.domains.devices.models import Device, DeviceStatus, VendorType
 from app.domains.devices.schemas import DeviceCreate, SnmpConfigUpdate, SshConfigUpdate
-from app.domains.licensing.service import enforce_device_quota
+from app.domains.licensing.service import enforce_device_quota, lock_license_for_update
 
 
 def count_devices(db: Session, vendor_type: VendorType) -> int:
@@ -19,6 +19,10 @@ def count_devices(db: Session, vendor_type: VendorType) -> int:
 
 
 def create_device(db: Session, payload: DeviceCreate, *, actor: str) -> Device:
+    # Lock before counting, not after, so a concurrent create_device is
+    # blocked until this one commits (or rolls back) rather than reading
+    # the same stale count - see lock_license_for_update's docstring.
+    lock_license_for_update(db)
     enforce_device_quota(db, payload.vendor_type.value, count_devices(db, payload.vendor_type))
 
     device = Device(

@@ -18,7 +18,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       const { data } = await apiClient.post("/auth/login", { username, password });
-      setAuth(data.access_token, username);
+      setAuth(data.access_token, data.refresh_token, username);
       navigate("/");
     } catch {
       setError("نام کاربری یا رمز عبور اشتباه است");

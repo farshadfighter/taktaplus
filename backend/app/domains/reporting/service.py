@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, aliased
 
 from app.core.config import get_settings
 from app.domains.backups.models import Backup, BackupStatus
@@ -12,21 +13,40 @@ from app.domains.monitoring.models import SnmpAlert, SnmpMetricSample
 from app.domains.reporting.schemas import FleetStatusRow
 
 
-def _latest_backup(db: Session, device_id) -> Backup | None:
-    return db.scalar(select(Backup).where(Backup.device_id == device_id).order_by(Backup.taken_at.desc()).limit(1))
+def _latest_backups_by_device(db: Session, device_ids: list[uuid.UUID]) -> dict[uuid.UUID, Backup]:
+    """One query for every device's latest backup instead of one query per
+    device - the per-device version made build_fleet_status issue 1+3N
+    queries for an N-device fleet (this, the metrics, and the alert-count
+    lookup below).
+    """
+    if not device_ids:
+        return {}
+    rn = func.row_number().over(partition_by=Backup.device_id, order_by=Backup.taken_at.desc())
+    ranked = select(Backup, rn.label("rn")).where(Backup.device_id.in_(device_ids)).subquery()
+    latest = aliased(Backup, ranked)
+    rows = db.scalars(select(latest).where(ranked.c.rn == 1))
+    return {b.device_id: b for b in rows}
 
 
-def _latest_metric(db: Session, device_id) -> SnmpMetricSample | None:
-    return db.scalar(
-        select(SnmpMetricSample)
-        .where(SnmpMetricSample.device_id == device_id)
-        .order_by(SnmpMetricSample.collected_at.desc())
-        .limit(1)
-    )
+def _latest_metrics_by_device(db: Session, device_ids: list[uuid.UUID]) -> dict[uuid.UUID, SnmpMetricSample]:
+    if not device_ids:
+        return {}
+    rn = func.row_number().over(partition_by=SnmpMetricSample.device_id, order_by=SnmpMetricSample.collected_at.desc())
+    ranked = select(SnmpMetricSample, rn.label("rn")).where(SnmpMetricSample.device_id.in_(device_ids)).subquery()
+    latest = aliased(SnmpMetricSample, ranked)
+    rows = db.scalars(select(latest).where(ranked.c.rn == 1))
+    return {m.device_id: m for m in rows}
 
 
-def _open_alert_count(db: Session, device_id) -> int:
-    return len(list(db.scalars(select(SnmpAlert).where(SnmpAlert.device_id == device_id, SnmpAlert.acknowledged.is_(False)))))
+def _open_alert_counts_by_device(db: Session, device_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    if not device_ids:
+        return {}
+    rows = db.execute(
+        select(SnmpAlert.device_id, func.count())
+        .where(SnmpAlert.device_id.in_(device_ids), SnmpAlert.acknowledged.is_(False))
+        .group_by(SnmpAlert.device_id)
+    ).all()
+    return {device_id: count for device_id, count in rows}
 
 
 def _is_backup_overdue(latest_backup: Backup | None, threshold_hours: int) -> bool:
@@ -42,11 +62,17 @@ def _aware(dt: datetime) -> datetime:
 
 def build_fleet_status(db: Session) -> list[FleetStatusRow]:
     settings = get_settings()
-    rows: list[FleetStatusRow] = []
+    devices = list_devices(db)
+    device_ids = [d.id for d in devices]
 
-    for device in list_devices(db):
-        backup = _latest_backup(db, device.id)
-        metric = _latest_metric(db, device.id)
+    backups_by_device = _latest_backups_by_device(db, device_ids)
+    metrics_by_device = _latest_metrics_by_device(db, device_ids)
+    alert_counts_by_device = _open_alert_counts_by_device(db, device_ids)
+
+    rows: list[FleetStatusRow] = []
+    for device in devices:
+        backup = backups_by_device.get(device.id)
+        metric = metrics_by_device.get(device.id)
 
         rows.append(
             FleetStatusRow(
@@ -61,7 +87,7 @@ def build_fleet_status(db: Session) -> list[FleetStatusRow]:
                 snmp_enabled=device.snmp_enabled,
                 latest_cpu_percent=metric.cpu_percent if metric else None,
                 latest_memory_percent=metric.memory_percent if metric else None,
-                open_alert_count=_open_alert_count(db, device.id),
+                open_alert_count=alert_counts_by_device.get(device.id, 0),
             )
         )
 

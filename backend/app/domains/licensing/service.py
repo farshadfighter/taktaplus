@@ -19,6 +19,20 @@ def get_license(db: Session) -> License | None:
     return db.scalar(select(License).limit(1))
 
 
+def lock_license_for_update(db: Session) -> License | None:
+    """Row-lock the (singleton) license row for the rest of the current
+    transaction. Any create flow that checks a quota (enforce_device_quota,
+    enforce_2fa_seat_quota) and then inserts a row must call this *before*
+    counting, in the same session, and commit before releasing it -
+    otherwise two concurrent requests can both pass the count check before
+    either commits and together exceed the licensed quota (a
+    check-then-insert TOCTOU race). SQLite (used in tests) has no row-level
+    locking and silently ignores FOR UPDATE, so this is a no-op there -
+    fine, since the test suite doesn't exercise concurrent writers.
+    """
+    return db.scalar(select(License).limit(1).with_for_update())
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 

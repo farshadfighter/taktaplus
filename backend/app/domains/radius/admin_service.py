@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import encrypt_secret
 from app.domains.audit.service import record_audit_event
-from app.domains.licensing.service import enforce_2fa_seat_quota
+from app.domains.licensing.service import enforce_2fa_seat_quota, lock_license_for_update
 from app.domains.radius.models import OtpChallenge, RadiusClient, SmsGatewayConfig, SmsProvider, TwoFactorUser
 
 
@@ -29,6 +29,10 @@ def get_two_factor_user(db: Session, user_id) -> TwoFactorUser | None:
 def create_two_factor_user(
     db: Session, *, username: str, password: str, mobile_number: str, actor: str
 ) -> TwoFactorUser:
+    # Lock before counting, not after, so a concurrent create is blocked
+    # until this one commits (or rolls back) rather than reading the same
+    # stale count - see lock_license_for_update's docstring.
+    lock_license_for_update(db)
     enforce_2fa_seat_quota(db, count_two_factor_users(db))
 
     user = TwoFactorUser(

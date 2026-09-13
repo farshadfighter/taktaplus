@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.v1.deps import get_current_user
-from app.core.auth import create_access_token, create_refresh_token
+from app.core.auth import create_access_token, create_refresh_token, decode_token
 from app.db.session import get_db
 from app.domains.audit.service import record_audit_event
 from app.domains.identity.models import User
-from app.domains.identity.schemas import LoginRequest, TokenResponse, UserOut
-from app.domains.identity.service import authenticate_user
+from app.domains.identity.schemas import LoginRequest, RefreshRequest, TokenResponse, UserOut
+from app.domains.identity.service import authenticate_user, get_user_by_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -20,6 +20,27 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="نام کاربری یا رمز عبور اشتباه است")
 
     record_audit_event(db, actor=user.username, action="auth.login.success", target=user.username)
+    return TokenResponse(
+        access_token=create_access_token(str(user.id)),
+        refresh_token=create_refresh_token(str(user.id)),
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    invalid_token_error = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="توکن نامعتبر است")
+    try:
+        claims = decode_token(payload.refresh_token)
+    except ValueError as exc:
+        raise invalid_token_error from exc
+
+    if claims.get("type") != "refresh":
+        raise invalid_token_error
+
+    user = get_user_by_id(db, claims["sub"])
+    if user is None or not user.is_active:
+        raise invalid_token_error
+
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
         refresh_token=create_refresh_token(str(user.id)),

@@ -1,7 +1,10 @@
 import pytest
+from fastapi import HTTPException
 
-from app.core.auth import create_access_token, decode_token, hash_password, verify_password
+from app.core.auth import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 from app.domains.identity.models import Role, User
+from app.domains.identity.router import refresh
+from app.domains.identity.schemas import RefreshRequest
 from app.domains.identity.seed_roles import DEFAULT_ROLES
 from app.domains.identity.service import authenticate_user
 
@@ -39,3 +42,52 @@ def test_authenticate_user_success_and_failure(db_session):
     assert authenticate_user(db_session, "alice", "s3cret") is not None
     assert authenticate_user(db_session, "alice", "wrong") is None
     assert authenticate_user(db_session, "no-such-user", "s3cret") is None
+
+
+def _make_user(db_session) -> User:
+    role = Role(name="operator", permissions=DEFAULT_ROLES["operator"])
+    db_session.add(role)
+    db_session.flush()
+    user = User(username="alice", password_hash=hash_password("s3cret"), role_id=role.id)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+def test_refresh_issues_new_access_and_refresh_tokens(db_session):
+    user = _make_user(db_session)
+    refresh_token = create_refresh_token(str(user.id))
+
+    result = refresh(RefreshRequest(refresh_token=refresh_token), db_session)
+
+    access_payload = decode_token(result.access_token)
+    assert access_payload["sub"] == str(user.id)
+    assert access_payload["type"] == "access"
+
+    refresh_payload = decode_token(result.refresh_token)
+    assert refresh_payload["sub"] == str(user.id)
+    assert refresh_payload["type"] == "refresh"
+
+
+def test_refresh_rejects_an_access_token(db_session):
+    user = _make_user(db_session)
+    access_token = create_access_token(str(user.id))
+
+    with pytest.raises(HTTPException):
+        refresh(RefreshRequest(refresh_token=access_token), db_session)
+
+
+def test_refresh_rejects_garbage_token(db_session):
+    with pytest.raises(HTTPException):
+        refresh(RefreshRequest(refresh_token="not-a-real-token"), db_session)
+
+
+def test_refresh_rejects_disabled_user(db_session):
+    user = _make_user(db_session)
+    refresh_token = create_refresh_token(str(user.id))
+    user.is_active = False
+    db_session.commit()
+
+    with pytest.raises(HTTPException):
+        refresh(RefreshRequest(refresh_token=refresh_token), db_session)
