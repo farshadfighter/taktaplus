@@ -1,3 +1,5 @@
+from sqlalchemy.orm import sessionmaker
+
 from app.domains.audit.models import AuditLog
 from app.domains.audit.service import record_audit_event, verify_chain_integrity
 
@@ -55,3 +57,51 @@ def test_sequence_assigned_in_insertion_order(db_session):
 
     rows = list(db_session.query(AuditLog).order_by(AuditLog.sequence.asc()))
     assert [r.action for r in rows] == ["a0", "a1", "a2"]
+
+
+def test_record_audit_event_retries_on_a_genuine_sequence_conflict(db_session, monkeypatch):
+    """Forces the exact race the unique `sequence` constraint + retry loop
+    exist for: a second, independent session lands a row at the same
+    `sequence` value in the gap between our session's read and its commit.
+    Real thread timing against a single in-memory sqlite connection isn't
+    a reliable way to reproduce this, so it's forced deterministically by
+    hooking the first commit call to smuggle in a conflicting row from a
+    second session that shares the same underlying engine/database - the
+    same "another session already grabbed this slot" situation a
+    unique-constraint violation on Postgres would represent for real.
+    """
+    first = record_audit_event(db_session, actor="alice", action="first")  # sequence=1
+
+    InterloperSession = sessionmaker(bind=db_session.get_bind())
+    original_commit = db_session.commit
+    calls = {"n": 0}
+
+    def racing_commit():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # A genuinely concurrent writer would have read the same "last"
+            # entry we did (since it committed before we did), so it
+            # computes the same prev_hash we did - that's what makes this a
+            # believable race and not just a corrupt row.
+            interloper = InterloperSession()
+            interloper.add(
+                AuditLog(
+                    sequence=2,
+                    actor="bob",
+                    action="interloper",
+                    prev_hash=first.entry_hash,
+                    entry_hash=AuditLog.compute_hash(first.entry_hash, "bob", "interloper", "", ""),
+                )
+            )
+            interloper.commit()
+            interloper.close()
+        original_commit()
+
+    monkeypatch.setattr(db_session, "commit", racing_commit)
+
+    second = record_audit_event(db_session, actor="alice", action="second")
+
+    assert calls["n"] == 2, "expected exactly one conflict then one successful retry"
+    assert second.sequence == 3
+    assert second.prev_hash != first.entry_hash  # anchored to the interloper, not skipped over
+    assert verify_chain_integrity(db_session)

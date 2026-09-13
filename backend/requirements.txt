@@ -18,3 +18,10 @@ pyasn1==0.4.8
 paramiko==4.0.0
 pyftpdlib==2.2.0
 pyrad==2.5.4
+# asyncore/asynchat were removed from the stdlib in Python 3.12; pysnmp and
+# pyftpdlib both still import them by name. These backports supply the same
+# module names - see app/core/pysnmp_compat.py for the (separate) second
+# fix this needed, and docs/monitoring.md / docs/signature-distribution.md
+# for what was actually verified on Python 3.13.
+pyasyncore==1.0.5
+pyasynchat==1.0.5

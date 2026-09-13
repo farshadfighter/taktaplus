@@ -6,10 +6,17 @@ drive pyrad's own poll-based event loop rather than fitting a
 request/response or task-queue model - same reasoning as the SNMP trap
 receiver and FTP relay.
 
-Registered NAS clients (RadiusClient rows) are loaded once at startup,
-keyed by their nas_ip with their decrypted shared secret. Adding, editing
-or disabling a RadiusClient after this process has started requires
-restarting it - same documented limitation as the other standalone workers.
+Registered NAS clients (RadiusClient rows) are re-loaded from the database
+periodically (every radius_client_refresh_seconds, via a background
+thread - see _refresh_hosts_periodically) rather than only once at
+startup, so adding, editing, or disabling a RadiusClient no longer needs a
+process restart to take effect. pyrad's Server.Run() has no timer-callback
+hook (unlike pysnmp's dispatcher, see snmp_trap_receiver.py), so this uses
+a plain background thread instead - safe because the refresh only ever
+*replaces* the `hosts` dict reference (never mutates the existing dict in
+place), and a single reference reassignment is atomic under the GIL, so
+HandleAuthPacket always sees either the fully-old or fully-new mapping,
+never a partial one.
 
 CRITICAL pyrad gotcha (found during protocol-level testing against a real
 pyrad client, see docs/radius-2fa.md): Packet.__getitem__ auto-decodes
@@ -38,6 +45,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 
 from pyrad import packet
 from pyrad.dictionary import Dictionary
@@ -100,20 +108,40 @@ class TaktaplusRadiusServer(Server):
         self.SendReplyPacket(pkt.fd, reply)
 
 
-def _build_server() -> TaktaplusRadiusServer:
-    settings = get_settings()
-    radius_dict = Dictionary(DICTIONARY_PATH)
-
-    hosts: dict[str, RemoteHost] = {}
+def _load_hosts() -> dict[str, RemoteHost]:
     db = SessionLocal()
     try:
         clients = [c for c in list_radius_clients(db) if c.enabled]
-        for client in clients:
-            secret = decrypt_secret(client.encrypted_shared_secret).encode("utf-8")
-            hosts[client.nas_ip] = RemoteHost(client.nas_ip, secret, client.name)
-        logger.info("registered %d RADIUS client(s)", len(clients))
+        return {
+            client.nas_ip: RemoteHost(client.nas_ip, decrypt_secret(client.encrypted_shared_secret).encode("utf-8"), client.name)
+            for client in clients
+        }
     finally:
         db.close()
+
+
+def _hosts_snapshot(hosts: dict[str, RemoteHost]) -> set[tuple[str, bytes, str]]:
+    return {(ip, host.secret, host.name) for ip, host in hosts.items()}
+
+
+def _refresh_hosts_periodically(server: "TaktaplusRadiusServer", interval_seconds: int, stop_event: threading.Event) -> None:
+    while not stop_event.wait(interval_seconds):
+        try:
+            new_hosts = _load_hosts()
+        except Exception:
+            logger.exception("failed to refresh RADIUS clients from the database")
+            continue
+
+        if _hosts_snapshot(new_hosts) != _hosts_snapshot(server.hosts):
+            server.hosts = new_hosts
+            logger.info("RADIUS clients refreshed: now trusting %d NAS(es)", len(new_hosts))
+
+
+def _build_server() -> TaktaplusRadiusServer:
+    settings = get_settings()
+    radius_dict = Dictionary(DICTIONARY_PATH)
+    hosts = _load_hosts()
+    logger.info("registered %d RADIUS client(s)", len(hosts))
 
     return TaktaplusRadiusServer(
         addresses=[settings.radius_listen_host],
@@ -130,10 +158,20 @@ def run() -> None:
     settings = get_settings()
     server = _build_server()
     logger.info("RADIUS auth server listening on %s:%d", settings.radius_listen_host, settings.radius_auth_port)
+
+    stop_event = threading.Event()
+    refresh_thread = threading.Thread(
+        target=_refresh_hosts_periodically,
+        args=(server, settings.radius_client_refresh_seconds, stop_event),
+        daemon=True,
+    )
+    refresh_thread.start()
     try:
         server.Run()
     except KeyboardInterrupt:
         pass
+    finally:
+        stop_event.set()
 
 
 if __name__ == "__main__":

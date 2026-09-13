@@ -103,9 +103,19 @@ source, which does default to Fortinet's own server). Two provider modes:
 
 ## Operational notes
 
-- `RadiusClient` rows (NAS/FortiGate + shared secret) are loaded once at
-  `radius_server.py` startup, same restart-required-to-pick-up-changes
-  limitation as the SNMP trap receiver and FTP relay.
+- `RadiusClient` rows (NAS/FortiGate + shared secret) are re-loaded from
+  the database every `radius_client_refresh_seconds` (default 30s), not
+  just once at startup - adding, editing, or disabling a NAS no longer
+  needs a process restart. pyrad's `Server.Run()` has no timer-callback
+  hook (unlike pysnmp's dispatcher - see docs/monitoring.md), so this
+  uses a plain background thread instead; safe because the refresh only
+  ever *replaces* the `hosts` dict reference rather than mutating it in
+  place, and a single reference reassignment is atomic under the GIL.
+  Verified end to end: a real pyrad client's request from an
+  as-yet-unregistered NAS times out, a `RadiusClient` row is then
+  inserted with the server still running, and the same client succeeds
+  once the refresh interval has passed - see
+  `tests/test_radius_server_e2e.py::test_new_radius_client_is_picked_up_without_restart`.
 - Only authentication (UDP 1812) is served; accounting and CoA are
   disabled since none of FortiGate's admin/SSL-VPN/IPsec secondary-auth
   use of this server needs them.

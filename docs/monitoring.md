@@ -17,13 +17,26 @@ branch's `pysnmp.hlapi.getCmd` is synchronous and simple to call from a
 Celery task; `pyasn1==0.4.8` is the version it actually works with (newer
 pyasn1 releases break it).
 
-**Known constraint**: the classic branch's trap receiver
-(`pysnmp.carrier.asyncore.dgram.udp`) depends on Python's `asyncore` module,
-which is deprecated and removed starting Python 3.12. `backend/Dockerfile`
-pins `python:3.11-slim` for exactly this reason - do not bump the Python
-base image without re-evaluating this dependency first (either pinning
-asyncore's removal away, or migrating the trap receiver to the lextudio v6
-async API).
+**Two real Python-3.12+ incompatibilities, found and fixed by actually
+running the test suite on 3.12/3.13, not by upgrading pysnmp**: the classic
+branch's trap receiver (`pysnmp.carrier.asyncore.dgram.udp`) - and, via
+`pysnmp.hlapi`, the poller too - import `asyncore`/`asynchat`, removed
+outright in 3.12. Fixed with the `pyasyncore`/`pyasynchat` backport
+packages (see `requirements.txt`), which supply top-level modules with
+those exact names. Separately, `pysnmp.smi.builder` does `import
+importlib` and then accesses `importlib.util.MAGIC_NUMBER` without ever
+doing `import importlib.util` itself - that submodule is only bound onto
+the `importlib` package object if *something else* in the process
+imported it first (true by accident under pytest/uvicorn/celery, not
+guaranteed). When it isn't true, pysnmp falls back to `import imp`, a
+module removed in 3.12 with no available shim - so `app/core/pysnmp_compat.py`
+imports `importlib.util`/`importlib.machinery` explicitly before pysnmp,
+guaranteeing pysnmp's own happy path always succeeds regardless of
+import order elsewhere. Verified end to end on Python 3.12 and 3.13: a
+real `snmpd` answering `poll_device`, a real `snmptrap` received by the
+actual `app.workers.snmp_trap_receiver` module, and pyftpdlib's real
+server (phase 4) - `backend/Dockerfile` now runs `python:3.12-slim`.
+The lextudio v6+ async API migration is no longer needed for this.
 
 ## What was verified during development vs. what's still a guess
 
@@ -58,13 +71,24 @@ What's still unverified against real Fortinet hardware:
 - Runs as its own process (`app.workers.snmp_trap_receiver`, wired up as
   the `snmp-trap-receiver` service in docker-compose), not inside FastAPI
   or Celery, because it owns a UDP socket and pysnmp's own event loop.
-- Registers one SNMP-COMMUNITY-MIB entry per SNMP-enabled device at
-  startup, decrypting each device's community string. **Changing a
-  device's SNMP settings after the process has started requires
-  restarting it** - there's no hot-reload (SIGHUP or periodic refresh)
-  yet. The per-device index string used internally is a short positional
-  tag (`area0`, `area1`, ...), not the device's UUID - SNMP-COMMUNITY-MIB
-  caps that index at 32 octets, which a UUID doesn't fit in.
+- Registers one SNMP-COMMUNITY-MIB entry per distinct community string in
+  use by an SNMP-enabled device, and **re-syncs that against the database
+  every `snmp_trap_config_refresh_seconds` (default 30s)** - enabling,
+  disabling, or changing a device's SNMP community no longer needs a
+  process restart, verified end to end with a real `snmptrap` sent before
+  and after adding a device mid-run (`tests` don't cover this specific
+  process-level behavior; it was verified manually - see the commit that
+  introduced `_CommunityRegistry`). The refresh runs via pysnmp's own
+  timer-callback hook (`transportDispatcher.registerTimerCbFun`), on the
+  same thread as trap processing, so there's no concurrent-mutation risk
+  with pysnmp's internal engine state. The per-registration index string
+  used internally is a short counter-based tag (`area0`, `area1`, ...),
+  not the device's UUID - SNMP-COMMUNITY-MIB caps that index at 32 octets,
+  which a UUID doesn't fit in, and the counter never reuses a tag even
+  across add/remove cycles.
+- The source-IP-to-device lookup (below) was never stale - it already
+  queries the database fresh on every trap. Only the community-string
+  allowlist needed the periodic refresh above.
 - A trap's source device is resolved by matching its source IP against
   `Device.host`. A trap from an IP that isn't a known device is logged and
   dropped, not guessed at.

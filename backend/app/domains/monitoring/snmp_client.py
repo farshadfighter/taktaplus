@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from app.core import pysnmp_compat  # noqa: F401 - must import before pysnmp, see its docstring
+
 from pysnmp.hlapi import CommunityData, ContextData, ObjectIdentity, ObjectType, SnmpEngine, UdpTransportTarget, getCmd
 
 # Universal, not Fortinet-specific - high confidence.

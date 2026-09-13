@@ -99,13 +99,25 @@ entirely (API stops responding). Treat a `post_push_check_ok: false`
 (or `null`, meaning the check itself errored) as "go look at this device
 by hand," not as "the push was reverted."
 
-## Shared Python-3.11 constraint
+## Python 3.12+ compatibility
 
 Like the phase 3 SNMP trap receiver, `pyftpdlib` (the FTP relay) is built
 on the same deprecated `asyncore`/`asynchat` modules removed in Python
-3.12+ (confirmed via a real deprecation warning during development, see
-`docs/monitoring.md`). Both are reasons `backend/Dockerfile` stays pinned
-to `python:3.11-slim` - re-evaluate this dependency before bumping it.
+3.12+. Unlike pysnmp, `pyftpdlib` already declares the `pyasyncore`/
+`pyasynchat` backport packages as a conditional dependency for Python
+>= 3.12, so it needed no code change here - just having those packages
+installed (see `requirements.txt`, added for pysnmp's sake anyway) is
+enough. Verified end to end: the real `pyftpdlib.servers.FTPServer` used
+by `tests/test_ftp_source.py` passes on Python 3.12/3.13 - see
+`docs/monitoring.md` for the (separate, pysnmp-specific) second fix this
+required and what was verified. `backend/Dockerfile` now runs
+`python:3.12-slim`.
+
+The FTP relay itself has no hot-reload concern the way the SNMP trap
+receiver or RADIUS server do: `ftp_relay_username`/`ftp_relay_password`
+are a single, install-wide account read from settings/env at startup, not
+a per-entity list loaded from the database - there's nothing to
+periodically re-sync.
 
 ## What still needs real-hardware validation
 

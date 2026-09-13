@@ -25,7 +25,12 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
-    sequence: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # unique, not just indexed: this is what turns a genuinely concurrent
+    # double-write (two sessions both computing the same "next" sequence)
+    # into a loud IntegrityError that record_audit_event retries, instead
+    # of two rows silently sharing one sequence number and corrupting the
+    # chain's order.
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     actor: Mapped[str] = mapped_column(String(256))
     action: Mapped[str] = mapped_column(String(128))

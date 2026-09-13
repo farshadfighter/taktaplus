@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     snmp_poll_timeout_seconds: int = 5
     snmp_trap_listen_host: str = "0.0.0.0"
     snmp_trap_listen_port: int = 162
+    # How often the trap receiver re-checks which SNMP community strings
+    # are valid, without needing a process restart - see
+    # snmp_trap_receiver.py's _refresh_communities.
+    snmp_trap_config_refresh_seconds: int = 30
     snmp_cpu_alert_threshold: int = 90
     snmp_memory_alert_threshold: int = 90
     backup_overdue_hours: int = 48
@@ -85,6 +89,10 @@ class Settings(BaseSettings):
     # SMS-based two-factor RADIUS server (phase 5) - see docs/radius-2fa.md.
     radius_listen_host: str = "0.0.0.0"
     radius_auth_port: int = 1812
+    # How often the RADIUS server re-loads RadiusClient (NAS) rows from the
+    # database, without needing a process restart - see radius_server.py's
+    # _refresh_hosts.
+    radius_client_refresh_seconds: int = 30
     otp_length: int = 5
     otp_expiry_seconds: int = 120
     otp_max_attempts_per_challenge: int = 3
