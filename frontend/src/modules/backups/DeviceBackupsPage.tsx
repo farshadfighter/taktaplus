@@ -1,6 +1,11 @@
+import { Archive, ArrowRight, Database, Download, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { apiClient } from "@/services/apiClient";
 import { Device } from "@/modules/devices/types";
 import { Backup } from "@/modules/backups/types";
@@ -98,70 +103,82 @@ export function DeviceBackupsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <Link to="/devices">&larr; بازگشت به دستگاه‌ها</Link>
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>بکاپ‌های {device?.name ?? "..."}</h2>
-        <button className="btn" onClick={handleCreateBackup} disabled={taking}>
-          {taking ? "در حال بکاپ‌گیری..." : "بکاپ‌گیری الان"}
-        </button>
-      </div>
+      <Link to="/devices" className="back-link">
+        <ArrowRight size={14} />
+        بازگشت به دستگاه‌ها
+      </Link>
+      <PageHeader
+        title={`بکاپ‌های ${device?.name ?? "..."}`}
+        subtitle="بکاپ‌گیری دستی یا زمان‌بندی‌شده، دانلود و ریستور پیکربندی."
+        actions={
+          <button className="btn" onClick={handleCreateBackup} disabled={taking}>
+            <Database size={15} />
+            {taking ? "در حال بکاپ‌گیری..." : "بکاپ‌گیری الان"}
+          </button>
+        }
+      />
 
       <div className="card">
         {loading ? (
-          <p>در حال بارگذاری...</p>
+          <LoadingState />
         ) : backups.length === 0 ? (
-          <p>هنوز بکاپی گرفته نشده است.</p>
+          <EmptyState
+            icon={<Archive size={32} />}
+            title="هنوز بکاپی گرفته نشده است"
+            description="با دکمه «بکاپ‌گیری الان» اولین نسخه از پیکربندی این دستگاه را بگیرید."
+          />
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "1px solid var(--border)" }}>
-                <th style={{ padding: 8 }}>تاریخ</th>
-                <th style={{ padding: 8 }}>منبع</th>
-                <th style={{ padding: 8 }}>وضعیت</th>
-                <th style={{ padding: 8 }}>حجم</th>
-                <th style={{ padding: 8 }}>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {backups.map((b) => (
-                <tr key={b.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: 8 }}>{new Date(b.taken_at).toLocaleString("fa-IR")}</td>
-                  <td style={{ padding: 8 }}>{SOURCE_LABELS[b.source]}</td>
-                  <td style={{ padding: 8, color: b.status === "success" ? "var(--success)" : "var(--danger)" }}>
-                    {STATUS_LABELS[b.status]}
-                    {b.status === "failed" && b.error_message ? ` (${b.error_message})` : ""}
-                  </td>
-                  <td style={{ padding: 8 }}>{b.status === "success" ? formatSize(b.size_bytes) : "-"}</td>
-                  <td style={{ padding: 8, display: "flex", gap: 8 }}>
-                    {b.status === "success" && (
-                      <>
-                        <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => handleDownload(b)}>
-                          دانلود
-                        </button>
-                        <button
-                          className="btn"
-                          style={{ padding: "4px 10px", fontSize: 12 }}
-                          disabled={restoringId === b.id}
-                          onClick={() => handleRestore(b)}
-                        >
-                          {restoringId === b.id ? "..." : "ریستور"}
-                        </button>
-                      </>
-                    )}
-                    <button
-                      className="btn"
-                      style={{ padding: "4px 10px", fontSize: 12, background: "var(--danger)" }}
-                      onClick={() => handleDelete(b)}
-                    >
-                      حذف
-                    </button>
-                  </td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>تاریخ</th>
+                  <th>منبع</th>
+                  <th>وضعیت</th>
+                  <th>حجم</th>
+                  <th>عملیات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {backups.map((b) => (
+                  <tr key={b.id}>
+                    <td className="cell-primary">{new Date(b.taken_at).toLocaleString("fa-IR")}</td>
+                    <td className="cell-muted">{SOURCE_LABELS[b.source]}</td>
+                    <td>
+                      <Badge variant={b.status === "success" ? "success" : "danger"}>{STATUS_LABELS[b.status]}</Badge>
+                      {b.status === "failed" && b.error_message && (
+                        <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4 }}>{b.error_message}</div>
+                      )}
+                    </td>
+                    <td className="cell-muted">{b.status === "success" ? formatSize(b.size_bytes) : "-"}</td>
+                    <td>
+                      <div className="row-actions">
+                        {b.status === "success" && (
+                          <>
+                            <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(b)}>
+                              <Download size={13} />
+                              دانلود
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              disabled={restoringId === b.id}
+                              onClick={() => handleRestore(b)}
+                            >
+                              <RotateCcw size={13} />
+                              {restoringId === b.id ? "..." : "ریستور"}
+                            </button>
+                          </>
+                        )}
+                        <button className="btn btn-danger-ghost btn-sm btn-icon" onClick={() => handleDelete(b)} title="حذف">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

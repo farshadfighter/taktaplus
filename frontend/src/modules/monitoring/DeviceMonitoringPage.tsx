@@ -1,6 +1,11 @@
+import { ArrowRight, BellRing, Cpu, RadioTower, Zap } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { Badge, BadgeVariant } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { apiClient } from "@/services/apiClient";
 import { Device } from "@/modules/devices/types";
 import { SnmpAlert, SnmpMetric } from "@/modules/monitoring/types";
@@ -11,10 +16,10 @@ const SEVERITY_LABELS: Record<SnmpAlert["severity"], string> = {
   critical: "بحرانی",
 };
 
-const SEVERITY_COLORS: Record<SnmpAlert["severity"], string> = {
-  info: "var(--text-muted)",
-  warning: "var(--warning)",
-  critical: "var(--danger)",
+const SEVERITY_VARIANTS: Record<SnmpAlert["severity"], BadgeVariant> = {
+  info: "info",
+  warning: "warning",
+  critical: "danger",
 };
 
 export function DeviceMonitoringPage() {
@@ -90,17 +95,55 @@ export function DeviceMonitoringPage() {
     await load();
   }
 
+  const latest = metrics[0];
+
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <Link to="/devices">&larr; بازگشت به دستگاه‌ها</Link>
-      </div>
-      <h2 style={{ marginTop: 0 }}>مانیتورینگ {device?.name ?? "..."}</h2>
+      <Link to="/devices" className="back-link">
+        <ArrowRight size={14} />
+        بازگشت به دستگاه‌ها
+      </Link>
+      <PageHeader title={`مانیتورینگ ${device?.name ?? "..."}`} subtitle="پایش زنده CPU/حافظه/نشست از طریق SNMP و مدیریت هشدارها." />
+
+      {device?.snmp_enabled && latest && (
+        <div className="stat-grid">
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: "var(--primary-soft)", color: "var(--primary)" }}>
+              <Cpu size={18} />
+            </div>
+            <div>
+              <div className="stat-value">{latest.cpu_percent !== null ? `${latest.cpu_percent.toFixed(0)}%` : "-"}</div>
+              <div className="stat-label">مصرف CPU</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: "var(--info-soft)", color: "var(--info)" }}>
+              <Zap size={18} />
+            </div>
+            <div>
+              <div className="stat-value">{latest.memory_percent !== null ? `${latest.memory_percent.toFixed(0)}%` : "-"}</div>
+              <div className="stat-label">مصرف حافظه</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: "var(--warning-soft)", color: "var(--warning)" }}>
+              <BellRing size={18} />
+            </div>
+            <div>
+              <div className="stat-value">{alerts.filter((a) => !a.acknowledged).length}</div>
+              <div className="stat-label">هشدارهای بازتاییدنشده</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form className="card" style={{ marginBottom: 16, maxWidth: 420 }} onSubmit={handleSaveSnmp}>
-        <h3 style={{ marginTop: 0 }}>تنظیمات SNMP</h3>
+        <div className="card-title-row" style={{ marginBottom: 14 }}>
+          <RadioTower size={16} />
+          <span className="card-title">تنظیمات SNMP</span>
+        </div>
         {snmpError && <div className="banner banner-danger">{snmpError}</div>}
-        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <label className="checkbox-row">
           <input type="checkbox" checked={snmpEnabled} onChange={(e) => setSnmpEnabled(e.target.checked)} />
           فعال‌سازی مانیتورینگ SNMP (نسخه v2c)
         </label>
@@ -108,77 +151,85 @@ export function DeviceMonitoringPage() {
         <input className="input" type="number" value={snmpPort} onChange={(e) => setSnmpPort(Number(e.target.value))} />
         <label>Community (برای تغییر یا فعال‌سازی وارد کنید)</label>
         <input className="input" value={community} onChange={(e) => setCommunity(e.target.value)} placeholder="مثلاً public" />
-        <button className="btn" type="submit" disabled={savingSnmp}>
-          {savingSnmp ? "در حال ذخیره..." : "ذخیره تنظیمات"}
-        </button>
-        {device?.snmp_enabled && (
-          <button type="button" className="btn" style={{ marginInlineStart: 8 }} onClick={handlePollNow} disabled={polling}>
-            {polling ? "در حال بررسی..." : "بررسی الان"}
+        <div className="form-actions">
+          <button className="btn" type="submit" disabled={savingSnmp}>
+            {savingSnmp ? "در حال ذخیره..." : "ذخیره تنظیمات"}
           </button>
-        )}
+          {device?.snmp_enabled && (
+            <button type="button" className="btn btn-secondary" onClick={handlePollNow} disabled={polling}>
+              {polling ? "در حال بررسی..." : "بررسی الان"}
+            </button>
+          )}
+        </div>
       </form>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>آخرین متریک‌ها</h3>
+        <div className="card-title" style={{ marginBottom: 14 }}>آخرین متریک‌ها</div>
         {loading ? (
-          <p>در حال بارگذاری...</p>
+          <LoadingState />
         ) : metrics.length === 0 ? (
-          <p>هنوز داده‌ای جمع‌آوری نشده است.</p>
+          <EmptyState icon={<Cpu size={28} />} title="هنوز داده‌ای جمع‌آوری نشده است" />
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "1px solid var(--border)" }}>
-                <th style={{ padding: 8 }}>زمان</th>
-                <th style={{ padding: 8 }}>CPU</th>
-                <th style={{ padding: 8 }}>حافظه</th>
-                <th style={{ padding: 8 }}>تعداد نشست</th>
-              </tr>
-            </thead>
-            <tbody>
-              {metrics.slice(0, 20).map((m) => (
-                <tr key={m.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: 8 }}>{new Date(m.collected_at).toLocaleString("fa-IR")}</td>
-                  <td style={{ padding: 8 }}>{m.cpu_percent !== null ? `${m.cpu_percent.toFixed(0)}%` : "-"}</td>
-                  <td style={{ padding: 8 }}>{m.memory_percent !== null ? `${m.memory_percent.toFixed(0)}%` : "-"}</td>
-                  <td style={{ padding: 8 }}>{m.session_count ?? "-"}</td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>زمان</th>
+                  <th>CPU</th>
+                  <th>حافظه</th>
+                  <th>تعداد نشست</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {metrics.slice(0, 20).map((m) => (
+                  <tr key={m.id}>
+                    <td className="cell-muted">{new Date(m.collected_at).toLocaleString("fa-IR")}</td>
+                    <td>{m.cpu_percent !== null ? `${m.cpu_percent.toFixed(0)}%` : "-"}</td>
+                    <td>{m.memory_percent !== null ? `${m.memory_percent.toFixed(0)}%` : "-"}</td>
+                    <td>{m.session_count ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>هشدارها</h3>
+        <div className="card-title" style={{ marginBottom: 14 }}>هشدارها</div>
         {alerts.length === 0 ? (
-          <p>هشداری ثبت نشده است.</p>
+          <EmptyState icon={<BellRing size={28} />} title="هشداری ثبت نشده است" />
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "1px solid var(--border)" }}>
-                <th style={{ padding: 8 }}>زمان</th>
-                <th style={{ padding: 8 }}>شدت</th>
-                <th style={{ padding: 8 }}>پیام</th>
-                <th style={{ padding: 8 }}>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.map((a) => (
-                <tr key={a.id} style={{ borderBottom: "1px solid var(--border)", opacity: a.acknowledged ? 0.5 : 1 }}>
-                  <td style={{ padding: 8 }}>{new Date(a.received_at).toLocaleString("fa-IR")}</td>
-                  <td style={{ padding: 8, color: SEVERITY_COLORS[a.severity] }}>{SEVERITY_LABELS[a.severity]}</td>
-                  <td style={{ padding: 8 }}>{a.message}</td>
-                  <td style={{ padding: 8 }}>
-                    {!a.acknowledged && (
-                      <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => handleAck(a)}>
-                        تایید
-                      </button>
-                    )}
-                  </td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>زمان</th>
+                  <th>شدت</th>
+                  <th>پیام</th>
+                  <th>عملیات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {alerts.map((a) => (
+                  <tr key={a.id} className={a.acknowledged ? "row-muted" : ""}>
+                    <td className="cell-muted">{new Date(a.received_at).toLocaleString("fa-IR")}</td>
+                    <td>
+                      <Badge variant={SEVERITY_VARIANTS[a.severity]}>{SEVERITY_LABELS[a.severity]}</Badge>
+                    </td>
+                    <td>{a.message}</td>
+                    <td>
+                      {!a.acknowledged && (
+                        <button className="btn btn-secondary btn-sm" onClick={() => handleAck(a)}>
+                          تایید
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

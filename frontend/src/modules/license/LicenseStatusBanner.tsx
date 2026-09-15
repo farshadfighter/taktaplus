@@ -1,3 +1,4 @@
+import { AlertTriangle, Clock, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -19,7 +20,10 @@ export function LicenseStatusBanner() {
   if (license.status === "unactivated") {
     return (
       <div className="banner banner-warning">
-        لایسنس taktaplus فعال نشده است. <Link to="/license">فعال‌سازی لایسنس</Link>
+        <ShieldAlert size={16} />
+        <span>
+          لایسنس taktaplus فعال نشده است. <Link to="/license">فعال‌سازی لایسنس</Link>
+        </span>
       </div>
     );
   }
@@ -27,7 +31,8 @@ export function LicenseStatusBanner() {
   if (license.status === "expired" || license.status === "suspended") {
     return (
       <div className="banner banner-danger">
-        لایسنس {license.status === "expired" ? "منقضی شده" : "معلق شده"} است. برای تمدید با پشتیبانی تماس بگیرید.
+        <AlertTriangle size={16} />
+        <span>لایسنس {license.status === "expired" ? "منقضی شده" : "معلق شده"} است. برای تمدید با پشتیبانی تماس بگیرید.</span>
       </div>
     );
   }
@@ -35,7 +40,8 @@ export function LicenseStatusBanner() {
   if (license.status === "grace") {
     return (
       <div className="banner banner-warning">
-        ارتباط با License Server برقرار نیست؛ نرم‌افزار در حالت مهلت (Grace) کار می‌کند.
+        <Clock size={16} />
+        <span>ارتباط با License Server برقرار نیست؛ نرم‌افزار در حالت مهلت (Grace) کار می‌کند.</span>
       </div>
     );
   }
@@ -43,7 +49,8 @@ export function LicenseStatusBanner() {
   if (license.expiry_warning && license.days_until_expiry !== null) {
     return (
       <div className="banner banner-warning">
-        لایسنس تا {license.days_until_expiry} روز دیگر منقضی می‌شود.
+        <Clock size={16} />
+        <span>لایسنس تا {license.days_until_expiry} روز دیگر منقضی می‌شود.</span>
       </div>
     );
   }

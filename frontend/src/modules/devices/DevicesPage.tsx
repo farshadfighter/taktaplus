@@ -1,6 +1,11 @@
+import { Activity, Archive, Plus, RadioTower, Server, Trash2, UploadCloud, X } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { Badge, BadgeVariant } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { apiClient } from "@/services/apiClient";
 import { Device, DeviceCreatePayload, DeviceTestResult, VendorType } from "@/modules/devices/types";
 
@@ -16,11 +21,11 @@ const STATUS_LABELS: Record<Device["status"], string> = {
   error: "خطا",
 };
 
-const STATUS_COLORS: Record<Device["status"], string> = {
-  unknown: "var(--text-muted)",
-  online: "var(--success)",
-  offline: "var(--text-muted)",
-  error: "var(--danger)",
+const STATUS_VARIANTS: Record<Device["status"], BadgeVariant> = {
+  unknown: "neutral",
+  online: "success",
+  offline: "neutral",
+  error: "danger",
 };
 
 function emptyForm(): DeviceCreatePayload {
@@ -88,15 +93,23 @@ export function DevicesPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>دستگاه‌ها</h2>
-        <button className="btn" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "انصراف" : "افزودن دستگاه"}
-        </button>
-      </div>
+      <PageHeader
+        title="دستگاه‌ها"
+        subtitle="مدیریت متمرکز دستگاه‌های FortiGate و FortiWeb."
+        actions={
+          <button className="btn" onClick={() => setShowForm((v) => !v)}>
+            {showForm ? <X size={15} /> : <Plus size={15} />}
+            {showForm ? "انصراف" : "افزودن دستگاه"}
+          </button>
+        }
+      />
 
       {showForm && (
         <form className="card" style={{ marginBottom: 16, maxWidth: 480 }} onSubmit={handleSubmit}>
+          <div className="card-title-row" style={{ marginBottom: 14 }}>
+            <Server size={16} />
+            <span className="card-title">دستگاه جدید</span>
+          </div>
           {formError && <div className="banner banner-danger">{formError}</div>}
 
           <label>نام دستگاه</label>
@@ -171,7 +184,7 @@ export function DevicesPage() {
             </>
           )}
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <label className="checkbox-row">
             <input
               type="checkbox"
               checked={form.verify_tls}
@@ -188,61 +201,75 @@ export function DevicesPage() {
 
       <div className="card">
         {loading ? (
-          <p>در حال بارگذاری...</p>
+          <LoadingState />
         ) : devices.length === 0 ? (
-          <p>هنوز دستگاهی اضافه نشده است.</p>
+          <EmptyState
+            icon={<Server size={32} />}
+            title="هنوز دستگاهی اضافه نشده است"
+            description="با دکمه «افزودن دستگاه» اولین FortiGate یا FortiWeb خود را ثبت کنید."
+          />
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "1px solid var(--border)" }}>
-                <th style={{ padding: 8 }}>نام</th>
-                <th style={{ padding: 8 }}>نوع</th>
-                <th style={{ padding: 8 }}>آدرس</th>
-                <th style={{ padding: 8 }}>وضعیت</th>
-                <th style={{ padding: 8 }}>فرم‌ور</th>
-                <th style={{ padding: 8 }}>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {devices.map((d) => (
-                <tr key={d.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: 8 }}>{d.name}</td>
-                  <td style={{ padding: 8 }}>{VENDOR_LABELS[d.vendor_type]}</td>
-                  <td style={{ padding: 8 }}>
-                    {d.host}:{d.port}
-                  </td>
-                  <td style={{ padding: 8, color: STATUS_COLORS[d.status] }}>{STATUS_LABELS[d.status]}</td>
-                  <td style={{ padding: 8 }}>{d.firmware_version || "-"}</td>
-                  <td style={{ padding: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      className="btn"
-                      style={{ padding: "4px 10px", fontSize: 12 }}
-                      disabled={testingId === d.id}
-                      onClick={() => handleTestConnection(d.id)}
-                    >
-                      {testingId === d.id ? "در حال تست..." : "تست اتصال"}
-                    </button>
-                    <Link to={`/devices/${d.id}/backups`} className="btn" style={{ padding: "4px 10px", fontSize: 12 }}>
-                      بکاپ‌ها
-                    </Link>
-                    <Link to={`/devices/${d.id}/monitoring`} className="btn" style={{ padding: "4px 10px", fontSize: 12 }}>
-                      مانیتورینگ
-                    </Link>
-                    <Link to={`/devices/${d.id}/push`} className="btn" style={{ padding: "4px 10px", fontSize: 12 }}>
-                      سیگنیچر/فرم‌ور
-                    </Link>
-                    <button
-                      className="btn"
-                      style={{ padding: "4px 10px", fontSize: 12, background: "var(--danger)" }}
-                      onClick={() => handleDelete(d.id)}
-                    >
-                      حذف
-                    </button>
-                  </td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>نام</th>
+                  <th>نوع</th>
+                  <th>آدرس</th>
+                  <th>وضعیت</th>
+                  <th>فرم‌ور</th>
+                  <th>عملیات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {devices.map((d) => (
+                  <tr key={d.id}>
+                    <td className="cell-primary">{d.name}</td>
+                    <td>{VENDOR_LABELS[d.vendor_type]}</td>
+                    <td className="cell-mono">
+                      {d.host}:{d.port}
+                    </td>
+                    <td>
+                      <Badge variant={STATUS_VARIANTS[d.status]}>{STATUS_LABELS[d.status]}</Badge>
+                    </td>
+                    <td className="cell-muted">{d.firmware_version || "-"}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          disabled={testingId === d.id}
+                          onClick={() => handleTestConnection(d.id)}
+                          title="تست اتصال"
+                        >
+                          <Activity size={13} />
+                          {testingId === d.id ? "..." : "تست اتصال"}
+                        </button>
+                        <Link to={`/devices/${d.id}/backups`} className="btn btn-secondary btn-sm" title="بکاپ‌ها">
+                          <Archive size={13} />
+                          بکاپ‌ها
+                        </Link>
+                        <Link to={`/devices/${d.id}/monitoring`} className="btn btn-secondary btn-sm" title="مانیتورینگ">
+                          <RadioTower size={13} />
+                          مانیتورینگ
+                        </Link>
+                        <Link to={`/devices/${d.id}/push`} className="btn btn-secondary btn-sm" title="سیگنیچر/فرم‌ور">
+                          <UploadCloud size={13} />
+                          پوش
+                        </Link>
+                        <button
+                          className="btn btn-danger-ghost btn-sm btn-icon"
+                          onClick={() => handleDelete(d.id)}
+                          title="حذف دستگاه"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

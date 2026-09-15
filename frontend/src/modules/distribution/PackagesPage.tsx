@@ -1,5 +1,10 @@
+import { CloudDownload, PackageOpen, Trash2, UploadCloud } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { apiClient } from "@/services/apiClient";
 import { VendorType } from "@/modules/devices/types";
 import { FtpSourceConfig, Package } from "@/modules/distribution/types";
@@ -111,106 +116,122 @@ export function PackagesPage() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>سیگنیچر و فرم‌ور</h2>
+      <PageHeader title="سیگنیچر و فرم‌ور" subtitle="مدیریت منبع FTP و بسته‌های آفلاین سیگنیچر/فرم‌ور." />
 
-      <form className="card" style={{ marginBottom: 16, maxWidth: 480 }} onSubmit={handleSaveFtp}>
-        <h3 style={{ marginTop: 0 }}>منبع FTP</h3>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <input
-            type="checkbox"
-            checked={ftpConfig.use_custom}
-            onChange={(e) => setFtpConfig({ ...ftpConfig, use_custom: e.target.checked })}
-          />
-          استفاده از FTP سفارشی (به‌جای FTP پیش‌فرض ارائه‌دهنده)
-        </label>
-        {ftpConfig.use_custom && (
-          <>
-            <label>آدرس سرور</label>
-            <input className="input" value={ftpConfig.host} onChange={(e) => setFtpConfig({ ...ftpConfig, host: e.target.value })} />
-            <label>پورت</label>
+      <div className="card-grid" style={{ marginBottom: 16 }}>
+        <form className="card" onSubmit={handleSaveFtp}>
+          <div className="card-title-row" style={{ marginBottom: 14 }}>
+            <CloudDownload size={16} />
+            <span className="card-title">منبع FTP</span>
+          </div>
+          <label className="checkbox-row">
             <input
-              className="input"
-              type="number"
-              value={ftpConfig.port}
-              onChange={(e) => setFtpConfig({ ...ftpConfig, port: Number(e.target.value) })}
+              type="checkbox"
+              checked={ftpConfig.use_custom}
+              onChange={(e) => setFtpConfig({ ...ftpConfig, use_custom: e.target.checked })}
             />
-            <label>نام کاربری</label>
-            <input
-              className="input"
-              value={ftpConfig.username}
-              onChange={(e) => setFtpConfig({ ...ftpConfig, username: e.target.value })}
-            />
-            <label>رمز عبور</label>
-            <input className="input" type="password" value={ftpPassword} onChange={(e) => setFtpPassword(e.target.value)} />
-            <label>مسیر</label>
-            <input
-              className="input"
-              value={ftpConfig.remote_path}
-              onChange={(e) => setFtpConfig({ ...ftpConfig, remote_path: e.target.value })}
-            />
-          </>
-        )}
-        <button className="btn" type="submit" disabled={savingFtp}>
-          {savingFtp ? "در حال ذخیره..." : "ذخیره"}
-        </button>
-        <button type="button" className="btn" style={{ marginInlineStart: 8 }} onClick={handleSyncNow} disabled={syncing}>
-          {syncing ? "در حال همگام‌سازی..." : "همگام‌سازی الان"}
-        </button>
-        {syncResult && <p style={{ fontSize: 13, marginTop: 8 }}>{syncResult}</p>}
-      </form>
+            استفاده از FTP سفارشی (به‌جای FTP پیش‌فرض ارائه‌دهنده)
+          </label>
+          {ftpConfig.use_custom && (
+            <>
+              <label>آدرس سرور</label>
+              <input className="input" value={ftpConfig.host} onChange={(e) => setFtpConfig({ ...ftpConfig, host: e.target.value })} />
+              <label>پورت</label>
+              <input
+                className="input"
+                type="number"
+                value={ftpConfig.port}
+                onChange={(e) => setFtpConfig({ ...ftpConfig, port: Number(e.target.value) })}
+              />
+              <label>نام کاربری</label>
+              <input
+                className="input"
+                value={ftpConfig.username}
+                onChange={(e) => setFtpConfig({ ...ftpConfig, username: e.target.value })}
+              />
+              <label>رمز عبور</label>
+              <input className="input" type="password" value={ftpPassword} onChange={(e) => setFtpPassword(e.target.value)} />
+              <label>مسیر</label>
+              <input
+                className="input"
+                value={ftpConfig.remote_path}
+                onChange={(e) => setFtpConfig({ ...ftpConfig, remote_path: e.target.value })}
+              />
+            </>
+          )}
+          <div className="form-actions">
+            <button className="btn" type="submit" disabled={savingFtp}>
+              {savingFtp ? "در حال ذخیره..." : "ذخیره"}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={handleSyncNow} disabled={syncing}>
+              {syncing ? "در حال همگام‌سازی..." : "همگام‌سازی الان"}
+            </button>
+          </div>
+          {syncResult && <p style={{ fontSize: 12.5, marginTop: 12, color: "var(--text-muted)" }}>{syncResult}</p>}
+        </form>
 
-      <form className="card" style={{ marginBottom: 16, maxWidth: 480 }} onSubmit={handleUpload}>
-        <h3 style={{ marginTop: 0 }}>آپلود دستی بسته</h3>
-        {uploadError && <div className="banner banner-danger">{uploadError}</div>}
-        <label>نوع تجهیز</label>
-        <select className="input" value={uploadVendor} onChange={(e) => setUploadVendor(e.target.value as VendorType)}>
-          <option value="fortigate">FortiGate</option>
-          <option value="fortiweb">FortiWeb</option>
-        </select>
-        <label>نوع بسته (مثلاً ips, av, firmware)</label>
-        <input className="input" value={uploadType} onChange={(e) => setUploadType(e.target.value)} />
-        <label>فایل</label>
-        <input className="input" type="file" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} />
-        <button className="btn" type="submit" disabled={uploading || !uploadFile}>
-          {uploading ? "در حال آپلود..." : "آپلود"}
-        </button>
-      </form>
+        <form className="card" onSubmit={handleUpload}>
+          <div className="card-title-row" style={{ marginBottom: 14 }}>
+            <UploadCloud size={16} />
+            <span className="card-title">آپلود دستی بسته</span>
+          </div>
+          {uploadError && <div className="banner banner-danger">{uploadError}</div>}
+          <label>نوع تجهیز</label>
+          <select className="input" value={uploadVendor} onChange={(e) => setUploadVendor(e.target.value as VendorType)}>
+            <option value="fortigate">FortiGate</option>
+            <option value="fortiweb">FortiWeb</option>
+          </select>
+          <label>نوع بسته (مثلاً ips, av, firmware)</label>
+          <input className="input" value={uploadType} onChange={(e) => setUploadType(e.target.value)} />
+          <label>فایل</label>
+          <input className="input" type="file" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} />
+          <button className="btn" type="submit" disabled={uploading || !uploadFile}>
+            {uploading ? "در حال آپلود..." : "آپلود"}
+          </button>
+        </form>
+      </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>بسته‌های موجود</h3>
+        <div className="card-title" style={{ marginBottom: 14 }}>بسته‌های موجود</div>
         {loading ? (
-          <p>در حال بارگذاری...</p>
+          <LoadingState />
         ) : packages.length === 0 ? (
-          <p>هنوز بسته‌ای اضافه نشده است.</p>
+          <EmptyState icon={<PackageOpen size={32} />} title="هنوز بسته‌ای اضافه نشده است" />
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "1px solid var(--border)" }}>
-                <th style={{ padding: 8 }}>فایل</th>
-                <th style={{ padding: 8 }}>نوع تجهیز</th>
-                <th style={{ padding: 8 }}>نوع بسته</th>
-                <th style={{ padding: 8 }}>حجم</th>
-                <th style={{ padding: 8 }}>منبع</th>
-                <th style={{ padding: 8 }}>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {packages.map((p) => (
-                <tr key={p.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: 8 }}>{p.filename}</td>
-                  <td style={{ padding: 8 }}>{VENDOR_LABELS[p.vendor_type]}</td>
-                  <td style={{ padding: 8 }}>{p.package_type}</td>
-                  <td style={{ padding: 8 }}>{formatSize(p.size_bytes)}</td>
-                  <td style={{ padding: 8 }}>{p.source === "ftp_sync" ? "FTP" : "آپلود دستی"}</td>
-                  <td style={{ padding: 8 }}>
-                    <button className="btn" style={{ padding: "4px 10px", fontSize: 12, background: "var(--danger)" }} onClick={() => handleDelete(p)}>
-                      حذف
-                    </button>
-                  </td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>فایل</th>
+                  <th>نوع تجهیز</th>
+                  <th>نوع بسته</th>
+                  <th>حجم</th>
+                  <th>منبع</th>
+                  <th>عملیات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {packages.map((p) => (
+                  <tr key={p.id}>
+                    <td className="cell-primary">{p.filename}</td>
+                    <td>{VENDOR_LABELS[p.vendor_type]}</td>
+                    <td className="cell-muted">{p.package_type}</td>
+                    <td className="cell-muted">{formatSize(p.size_bytes)}</td>
+                    <td>
+                      <Badge variant={p.source === "ftp_sync" ? "info" : "neutral"}>
+                        {p.source === "ftp_sync" ? "FTP" : "آپلود دستی"}
+                      </Badge>
+                    </td>
+                    <td>
+                      <button className="btn btn-danger-ghost btn-sm btn-icon" onClick={() => handleDelete(p)} title="حذف">
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

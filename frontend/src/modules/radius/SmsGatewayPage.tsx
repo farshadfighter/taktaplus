@@ -1,5 +1,8 @@
+import { CheckCircle2, MessageSquareText, Send, Settings2, XCircle } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
+import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { apiClient } from "@/services/apiClient";
 import { SmsGatewayConfig, SmsProvider } from "@/modules/radius/types";
 
@@ -24,7 +27,7 @@ export function SmsGatewayPage() {
 
   const [testMobile, setTestMobile] = useState("");
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -70,92 +73,115 @@ export function SmsGatewayPage() {
     setTesting(true);
     try {
       await apiClient.post("/radius/sms-gateway/test", { mobile_number: testMobile });
-      setTestResult("پیامک آزمایشی با موفقیت ارسال شد");
+      setTestResult({ ok: true, message: "پیامک آزمایشی با موفقیت ارسال شد" });
     } catch (err: any) {
-      setTestResult(err?.response?.data?.detail ?? "ارسال پیامک آزمایشی ناموفق بود");
+      setTestResult({ ok: false, message: err?.response?.data?.detail ?? "ارسال پیامک آزمایشی ناموفق بود" });
     } finally {
       setTesting(false);
     }
   }
 
-  if (loading) return <p>در حال بارگذاری...</p>;
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="سرویس پیامکی" />
+        <div className="card">
+          <LoadingState />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>سرویس پیامکی</h2>
-      <p style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 640 }}>
-        برخلاف منبع FTP سیگنیچر، taktaplus هیچ حساب پیامکی پیش‌فرضی ندارد - هر نصب باید سرویس
-        پیامکی خودش را اینجا معرفی کند.
-      </p>
+      <PageHeader
+        title="سرویس پیامکی"
+        subtitle="برخلاف منبع FTP سیگنیچر، taktaplus هیچ حساب پیامکی پیش‌فرضی ندارد - هر نصب باید سرویس پیامکی خودش را اینجا معرفی کند."
+      />
 
-      <form className="card" style={{ marginBottom: 16, maxWidth: 480 }} onSubmit={handleSave}>
-        {error && <div className="banner banner-danger">{error}</div>}
-        <label>ارائه‌دهنده</label>
-        <select
-          className="input"
-          value={config.provider}
-          onChange={(e) => setConfig({ ...config, provider: e.target.value as SmsProvider })}
-        >
-          <option value="kavenegar">کاوه‌نگار</option>
-          <option value="generic_http">سرویس سفارشی (HTTP)</option>
-        </select>
+      <div className="card-grid">
+        <form className="card" onSubmit={handleSave}>
+          <div className="card-title-row" style={{ marginBottom: 14 }}>
+            <Settings2 size={16} />
+            <span className="card-title">پیکربندی</span>
+          </div>
+          {error && <div className="banner banner-danger">{error}</div>}
+          <label>ارائه‌دهنده</label>
+          <select
+            className="input"
+            value={config.provider}
+            onChange={(e) => setConfig({ ...config, provider: e.target.value as SmsProvider })}
+          >
+            <option value="kavenegar">کاوه‌نگار</option>
+            <option value="generic_http">سرویس سفارشی (HTTP)</option>
+          </select>
 
-        {config.provider === "kavenegar" ? (
-          <>
-            <label>کلید API {config.has_kavenegar_api_key && "(از قبل تنظیم شده - برای تغییر پر کنید)"}</label>
-            <input className="input" value={kavenegarApiKey} onChange={(e) => setKavenegarApiKey(e.target.value)} />
-            <label>نام فرستنده (اختیاری)</label>
-            <input
-              className="input"
-              value={config.kavenegar_sender ?? ""}
-              onChange={(e) => setConfig({ ...config, kavenegar_sender: e.target.value })}
-            />
-          </>
-        ) : (
-          <>
-            <label>متد</label>
-            <select
-              className="input"
-              value={config.generic_method}
-              onChange={(e) => setConfig({ ...config, generic_method: e.target.value })}
-            >
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-            </select>
-            <label>الگوی آدرس (شامل {"{mobile}"} و {"{code}"})</label>
-            <input
-              className="input"
-              value={config.generic_url_template ?? ""}
-              onChange={(e) => setConfig({ ...config, generic_url_template: e.target.value })}
-              placeholder="https://example.com/send?to={mobile}&text={code}"
-            />
-            <label>نام هدر احراز هویت (اختیاری)</label>
-            <input
-              className="input"
-              value={config.generic_auth_header_name ?? ""}
-              onChange={(e) => setConfig({ ...config, generic_auth_header_name: e.target.value })}
-            />
-            <label>
-              مقدار هدر احراز هویت {config.has_generic_auth_header_value && "(از قبل تنظیم شده - برای تغییر پر کنید)"}
-            </label>
-            <input className="input" value={genericAuthHeaderValue} onChange={(e) => setGenericAuthHeaderValue(e.target.value)} />
-          </>
-        )}
+          {config.provider === "kavenegar" ? (
+            <>
+              <label>کلید API {config.has_kavenegar_api_key && "(از قبل تنظیم شده - برای تغییر پر کنید)"}</label>
+              <input className="input" value={kavenegarApiKey} onChange={(e) => setKavenegarApiKey(e.target.value)} />
+              <label>نام فرستنده (اختیاری)</label>
+              <input
+                className="input"
+                value={config.kavenegar_sender ?? ""}
+                onChange={(e) => setConfig({ ...config, kavenegar_sender: e.target.value })}
+              />
+            </>
+          ) : (
+            <>
+              <label>متد</label>
+              <select
+                className="input"
+                value={config.generic_method}
+                onChange={(e) => setConfig({ ...config, generic_method: e.target.value })}
+              >
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+              </select>
+              <label>الگوی آدرس (شامل {"{mobile}"} و {"{code}"})</label>
+              <input
+                className="input"
+                value={config.generic_url_template ?? ""}
+                onChange={(e) => setConfig({ ...config, generic_url_template: e.target.value })}
+                placeholder="https://example.com/send?to={mobile}&text={code}"
+              />
+              <label>نام هدر احراز هویت (اختیاری)</label>
+              <input
+                className="input"
+                value={config.generic_auth_header_name ?? ""}
+                onChange={(e) => setConfig({ ...config, generic_auth_header_name: e.target.value })}
+              />
+              <label>
+                مقدار هدر احراز هویت {config.has_generic_auth_header_value && "(از قبل تنظیم شده - برای تغییر پر کنید)"}
+              </label>
+              <input className="input" value={genericAuthHeaderValue} onChange={(e) => setGenericAuthHeaderValue(e.target.value)} />
+            </>
+          )}
 
-        <button className="btn" type="submit" disabled={saving}>
-          {saving ? "در حال ذخیره..." : "ذخیره"}
-        </button>
-      </form>
+          <button className="btn" type="submit" disabled={saving}>
+            {saving ? "در حال ذخیره..." : "ذخیره"}
+          </button>
+        </form>
 
-      <form className="card" style={{ maxWidth: 480 }} onSubmit={handleTest}>
-        <h3 style={{ marginTop: 0 }}>ارسال پیامک آزمایشی</h3>
-        <label>شماره موبایل</label>
-        <input className="input" value={testMobile} onChange={(e) => setTestMobile(e.target.value)} required />
-        <button className="btn" type="submit" disabled={testing}>
-          {testing ? "در حال ارسال..." : "ارسال آزمایشی"}
-        </button>
-        {testResult && <p style={{ fontSize: 13, marginTop: 8 }}>{testResult}</p>}
-      </form>
+        <form className="card" onSubmit={handleTest} style={{ alignSelf: "flex-start" }}>
+          <div className="card-title-row" style={{ marginBottom: 14 }}>
+            <MessageSquareText size={16} />
+            <span className="card-title">ارسال پیامک آزمایشی</span>
+          </div>
+          <label>شماره موبایل</label>
+          <input className="input" value={testMobile} onChange={(e) => setTestMobile(e.target.value)} required />
+          <button className="btn" type="submit" disabled={testing}>
+            <Send size={14} />
+            {testing ? "در حال ارسال..." : "ارسال آزمایشی"}
+          </button>
+          {testResult && (
+            <div className={`banner ${testResult.ok ? "banner-success" : "banner-danger"}`} style={{ marginTop: 14, marginBottom: 0 }}>
+              {testResult.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+              <span>{testResult.message}</span>
+            </div>
+          )}
+        </form>
+      </div>
     </div>
   );
 }

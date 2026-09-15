@@ -1,6 +1,11 @@
+import { ArrowRight, History, PackageOpen, Send, Terminal } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { apiClient } from "@/services/apiClient";
 import { Device } from "@/modules/devices/types";
 import { Package, PushRecord } from "@/modules/distribution/types";
@@ -69,15 +74,19 @@ export function DevicePushPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <Link to="/devices">&larr; بازگشت به دستگاه‌ها</Link>
-      </div>
-      <h2 style={{ marginTop: 0 }}>توزیع سیگنیچر/فرم‌ور - {device?.name ?? "..."}</h2>
+      <Link to="/devices" className="back-link">
+        <ArrowRight size={14} />
+        بازگشت به دستگاه‌ها
+      </Link>
+      <PageHeader title={`توزیع سیگنیچر/فرم‌ور - ${device?.name ?? "..."}`} subtitle="پوش بسته‌های سیگنیچر و فرم‌ور به این دستگاه." />
 
       {device?.vendor_type === "fortigate" && (
         <form className="card" style={{ marginBottom: 16, maxWidth: 420 }} onSubmit={handleSaveSsh}>
-          <h3 style={{ marginTop: 0 }}>تنظیمات SSH (لازم برای پوش سیگنیچر)</h3>
-          <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          <div className="card-title-row" style={{ marginBottom: 6 }}>
+            <Terminal size={16} />
+            <span className="card-title">تنظیمات SSH (لازم برای پوش سیگنیچر)</span>
+          </div>
+          <p className="card-description" style={{ marginBottom: 14 }}>
             چون فورتی‌گیت برای دستور بازیابی سیگنیچر معادل REST API ندارد، این عملیات از طریق SSH انجام می‌شود.
           </p>
           <label>پورت</label>
@@ -93,66 +102,89 @@ export function DevicePushPage() {
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>بسته‌های قابل‌پوش</h3>
+        <div className="card-title-row" style={{ marginBottom: 14 }}>
+          <PackageOpen size={16} />
+          <span className="card-title">بسته‌های قابل‌پوش</span>
+        </div>
         {loading ? (
-          <p>در حال بارگذاری...</p>
+          <LoadingState />
         ) : packages.length === 0 ? (
-          <p>بسته‌ای برای این نوع تجهیز موجود نیست. از صفحه «سیگنیچر و فرم‌ور» اضافه کنید.</p>
+          <EmptyState
+            icon={<PackageOpen size={28} />}
+            title="بسته‌ای برای این نوع تجهیز موجود نیست"
+            description="از صفحه «سیگنیچر و فرم‌ور» بسته موردنظر را اضافه کنید."
+          />
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "1px solid var(--border)" }}>
-                <th style={{ padding: 8 }}>فایل</th>
-                <th style={{ padding: 8 }}>نوع بسته</th>
-                <th style={{ padding: 8 }}>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {packages.map((p) => (
-                <tr key={p.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: 8 }}>{p.filename}</td>
-                  <td style={{ padding: 8 }}>{p.package_type}</td>
-                  <td style={{ padding: 8 }}>
-                    <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} disabled={pushingId === p.id} onClick={() => handlePush(p)}>
-                      {pushingId === p.id ? "در حال پوش..." : "پوش به این دستگاه"}
-                    </button>
-                  </td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>فایل</th>
+                  <th>نوع بسته</th>
+                  <th>عملیات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {packages.map((p) => (
+                  <tr key={p.id}>
+                    <td className="cell-primary">{p.filename}</td>
+                    <td className="cell-muted">{p.package_type}</td>
+                    <td>
+                      <button className="btn btn-secondary btn-sm" disabled={pushingId === p.id} onClick={() => handlePush(p)}>
+                        <Send size={13} />
+                        {pushingId === p.id ? "در حال پوش..." : "پوش به این دستگاه"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>تاریخچه پوش</h3>
+        <div className="card-title-row" style={{ marginBottom: 14 }}>
+          <History size={16} />
+          <span className="card-title">تاریخچه پوش</span>
+        </div>
         {history.length === 0 ? (
-          <p>هنوز پوشی انجام نشده است.</p>
+          <EmptyState icon={<History size={28} />} title="هنوز پوشی انجام نشده است" />
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "1px solid var(--border)" }}>
-                <th style={{ padding: 8 }}>زمان</th>
-                <th style={{ padding: 8 }}>وضعیت</th>
-                <th style={{ padding: 8 }}>سلامت پس از پوش</th>
-                <th style={{ padding: 8 }}>خطا</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((h) => (
-                <tr key={h.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: 8 }}>{new Date(h.pushed_at).toLocaleString("fa-IR")}</td>
-                  <td style={{ padding: 8, color: h.status === "success" ? "var(--success)" : "var(--danger)" }}>
-                    {h.status === "success" ? "موفق" : "ناموفق"}
-                  </td>
-                  <td style={{ padding: 8 }}>
-                    {h.post_push_check_ok === null ? "-" : h.post_push_check_ok ? "سالم" : "نامشخص/خطا"}
-                  </td>
-                  <td style={{ padding: 8 }}>{h.error_message || "-"}</td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>زمان</th>
+                  <th>وضعیت</th>
+                  <th>سلامت پس از پوش</th>
+                  <th>خطا</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {history.map((h) => (
+                  <tr key={h.id}>
+                    <td className="cell-muted">{new Date(h.pushed_at).toLocaleString("fa-IR")}</td>
+                    <td>
+                      <Badge variant={h.status === "success" ? "success" : "danger"}>
+                        {h.status === "success" ? "موفق" : "ناموفق"}
+                      </Badge>
+                    </td>
+                    <td>
+                      {h.post_push_check_ok === null ? (
+                        <span className="cell-muted">-</span>
+                      ) : h.post_push_check_ok ? (
+                        <Badge variant="success">سالم</Badge>
+                      ) : (
+                        <Badge variant="warning">نامشخص/خطا</Badge>
+                      )}
+                    </td>
+                    <td className="cell-muted">{h.error_message || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

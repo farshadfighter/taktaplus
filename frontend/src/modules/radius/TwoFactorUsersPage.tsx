@@ -1,5 +1,10 @@
+import { KeyRound, LockOpen, Power, Trash2, UserPlus } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { apiClient } from "@/services/apiClient";
 import { TwoFactorUser } from "@/modules/radius/types";
 
@@ -67,10 +72,16 @@ export function TwoFactorUsersPage() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>کاربران احراز هویت دومرحله‌ای پیامکی</h2>
+      <PageHeader
+        title="کاربران احراز هویت دومرحله‌ای پیامکی"
+        subtitle="مدیریت کاربرانی که از طریق RADIUS و کد پیامکی وارد فورتی‌گیت می‌شوند."
+      />
 
       <form className="card" style={{ marginBottom: 16, maxWidth: 480 }} onSubmit={handleCreate}>
-        <h3 style={{ marginTop: 0 }}>افزودن کاربر</h3>
+        <div className="card-title-row" style={{ marginBottom: 14 }}>
+          <UserPlus size={16} />
+          <span className="card-title">افزودن کاربر</span>
+        </div>
         {error && <div className="banner banner-danger">{error}</div>}
         <label>نام کاربری (باید با نام کاربری تنظیم‌شده در FortiGate یکسان باشد)</label>
         <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} required />
@@ -84,50 +95,58 @@ export function TwoFactorUsersPage() {
       </form>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>کاربران موجود</h3>
+        <div className="card-title" style={{ marginBottom: 14 }}>کاربران موجود</div>
         {loading ? (
-          <p>در حال بارگذاری...</p>
+          <LoadingState />
         ) : users.length === 0 ? (
-          <p>هنوز کاربری اضافه نشده است.</p>
+          <EmptyState icon={<KeyRound size={32} />} title="هنوز کاربری اضافه نشده است" />
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "1px solid var(--border)" }}>
-                <th style={{ padding: 8 }}>نام کاربری</th>
-                <th style={{ padding: 8 }}>وضعیت</th>
-                <th style={{ padding: 8 }}>تلاش‌های ناموفق</th>
-                <th style={{ padding: 8 }}>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: 8 }}>{u.username}</td>
-                  <td style={{ padding: 8 }}>
-                    {!u.enabled ? "غیرفعال" : isLocked(u) ? "قفل‌شده" : "فعال"}
-                  </td>
-                  <td style={{ padding: 8 }}>{u.failed_attempts}</td>
-                  <td style={{ padding: 8, display: "flex", gap: 6 }}>
-                    <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => handleToggle(u)}>
-                      {u.enabled ? "غیرفعال‌سازی" : "فعال‌سازی"}
-                    </button>
-                    {isLocked(u) && (
-                      <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => handleUnlock(u)}>
-                        باز کردن قفل
-                      </button>
-                    )}
-                    <button
-                      className="btn"
-                      style={{ padding: "4px 10px", fontSize: 12, background: "var(--danger)" }}
-                      onClick={() => handleDelete(u)}
-                    >
-                      حذف
-                    </button>
-                  </td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>نام کاربری</th>
+                  <th>وضعیت</th>
+                  <th>تلاش‌های ناموفق</th>
+                  <th>عملیات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td className="cell-primary">{u.username}</td>
+                    <td>
+                      {!u.enabled ? (
+                        <Badge variant="neutral">غیرفعال</Badge>
+                      ) : isLocked(u) ? (
+                        <Badge variant="danger">قفل‌شده</Badge>
+                      ) : (
+                        <Badge variant="success">فعال</Badge>
+                      )}
+                    </td>
+                    <td className="cell-muted">{u.failed_attempts}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn btn-secondary btn-sm" onClick={() => handleToggle(u)}>
+                          <Power size={13} />
+                          {u.enabled ? "غیرفعال‌سازی" : "فعال‌سازی"}
+                        </button>
+                        {isLocked(u) && (
+                          <button className="btn btn-secondary btn-sm" onClick={() => handleUnlock(u)}>
+                            <LockOpen size={13} />
+                            باز کردن قفل
+                          </button>
+                        )}
+                        <button className="btn btn-danger-ghost btn-sm btn-icon" onClick={() => handleDelete(u)} title="حذف">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

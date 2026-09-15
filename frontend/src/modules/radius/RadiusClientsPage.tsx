@@ -1,5 +1,10 @@
+import { Plus, Radio, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
+import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { apiClient } from "@/services/apiClient";
 import { RadiusClient } from "@/modules/radius/types";
 
@@ -52,15 +57,16 @@ export function RadiusClientsPage() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>کلاینت‌های RADIUS (فورتی‌گیت‌ها)</h2>
-      <p style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 640 }}>
-        هر فورتی‌گیتی که قرار است برای ورود ادمین، SSL VPN یا IPsec به این سرور RADIUS متصل
-        شود باید اینجا با آی‌پی و رمز مشترک خودش ثبت شود. تغییرات پس از راه‌اندازی مجدد سرویس
-        radius-server اعمال می‌شود.
-      </p>
+      <PageHeader
+        title="کلاینت‌های RADIUS (فورتی‌گیت‌ها)"
+        subtitle="هر فورتی‌گیتی که برای ورود ادمین، SSL VPN یا IPsec به این سرور RADIUS متصل می‌شود باید اینجا با آی‌پی و رمز مشترک خودش ثبت شود. تغییرات حداکثر تا ۳۰ ثانیه بعد به‌صورت خودکار اعمال می‌شود."
+      />
 
       <form className="card" style={{ marginBottom: 16, maxWidth: 480 }} onSubmit={handleCreate}>
-        <h3 style={{ marginTop: 0 }}>افزودن کلاینت</h3>
+        <div className="card-title-row" style={{ marginBottom: 14 }}>
+          <Plus size={16} />
+          <span className="card-title">افزودن کلاینت</span>
+        </div>
         {error && <div className="banner banner-danger">{error}</div>}
         <label>نام</label>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -74,40 +80,40 @@ export function RadiusClientsPage() {
       </form>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>کلاینت‌های موجود</h3>
+        <div className="card-title" style={{ marginBottom: 14 }}>کلاینت‌های موجود</div>
         {loading ? (
-          <p>در حال بارگذاری...</p>
+          <LoadingState />
         ) : clients.length === 0 ? (
-          <p>هنوز کلاینتی اضافه نشده است.</p>
+          <EmptyState icon={<Radio size={32} />} title="هنوز کلاینتی اضافه نشده است" />
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "1px solid var(--border)" }}>
-                <th style={{ padding: 8 }}>نام</th>
-                <th style={{ padding: 8 }}>آی‌پی</th>
-                <th style={{ padding: 8 }}>وضعیت</th>
-                <th style={{ padding: 8 }}>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((c) => (
-                <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ padding: 8 }}>{c.name}</td>
-                  <td style={{ padding: 8 }}>{c.nas_ip}</td>
-                  <td style={{ padding: 8 }}>{c.enabled ? "فعال" : "غیرفعال"}</td>
-                  <td style={{ padding: 8 }}>
-                    <button
-                      className="btn"
-                      style={{ padding: "4px 10px", fontSize: 12, background: "var(--danger)" }}
-                      onClick={() => handleDelete(c)}
-                    >
-                      حذف
-                    </button>
-                  </td>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>نام</th>
+                  <th>آی‌پی</th>
+                  <th>وضعیت</th>
+                  <th>عملیات</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {clients.map((c) => (
+                  <tr key={c.id}>
+                    <td className="cell-primary">{c.name}</td>
+                    <td className="cell-mono">{c.nas_ip}</td>
+                    <td>
+                      <Badge variant={c.enabled ? "success" : "neutral"}>{c.enabled ? "فعال" : "غیرفعال"}</Badge>
+                    </td>
+                    <td>
+                      <button className="btn btn-danger-ghost btn-sm btn-icon" onClick={() => handleDelete(c)} title="حذف">
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
