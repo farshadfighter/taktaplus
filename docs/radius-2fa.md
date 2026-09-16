@@ -87,12 +87,24 @@ client through all three outcomes for exactly this reason.
 
 Every installation must configure its own SMS gateway - there is no
 vendor-provided shared account (unlike the signature-distribution FTP
-source, which does default to Fortinet's own server). Two provider modes:
+source, which does default to Fortinet's own server). Three provider modes:
 
 - **Kavenegar**: confirmed against Kavenegar's own documented API shape
   (`POST https://api.kavenegar.com/v1/{api_key}/sms/send.json` with
   `receptor`/`message` form fields). Just needs an API key and optional
   sender line.
+- **sms.ir**: confirmed by reading its official Go SDK's source directly
+  (`github.com/1tzArad/sms_ir`, `transport.go`/`response.go`) rather than
+  its docs site (`apidocs.sms.ir` is blocked by this environment's egress
+  proxy, so it couldn't be fetched directly) - `POST
+  https://api.sms.ir/v1/send/bulk`, header `X-API-KEY: <key>`, JSON body
+  `{"lineNumber": <int>, "messageText": <str>, "mobiles": [<str>],
+  "sendDateTime": null}`. Needs an API key and the account's line number
+  (required by the endpoint, unlike Kavenegar's optional sender). Every
+  response - success or failure - comes back HTTP 200 with an envelope
+  `{"status": <int>, "message": <str>, "data": {...}}`; the SDK's own
+  transport layer treats `status != 1` as the error condition, so
+  `sms_gateway.py` checks the same field rather than the HTTP status code.
 - **generic_http**: a customer-supplied URL template with `{mobile}` and
   `{code}` placeholders, method (GET/POST), and an optional single auth
   header. Covers any other provider without taktaplus needing to guess at

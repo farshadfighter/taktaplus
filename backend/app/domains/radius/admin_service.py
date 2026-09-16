@@ -106,6 +106,8 @@ def set_sms_config(
     provider: SmsProvider,
     kavenegar_api_key: str | None,
     kavenegar_sender: str | None,
+    smsir_api_key: str | None = None,
+    smsir_line_number: str | None = None,
     generic_method: str,
     generic_url_template: str | None,
     generic_auth_header_name: str | None,
@@ -115,11 +117,14 @@ def set_sms_config(
     config = get_sms_config(db) or SmsGatewayConfig()
     config.provider = provider
     config.kavenegar_sender = kavenegar_sender
+    config.smsir_line_number = smsir_line_number
     config.generic_method = generic_method
     config.generic_url_template = generic_url_template
     config.generic_auth_header_name = generic_auth_header_name
     if kavenegar_api_key:
         config.encrypted_kavenegar_api_key = encrypt_secret(kavenegar_api_key)
+    if smsir_api_key:
+        config.encrypted_smsir_api_key = encrypt_secret(smsir_api_key)
     if generic_auth_header_value:
         config.encrypted_generic_auth_header_value = encrypt_secret(generic_auth_header_value)
 

@@ -43,6 +43,8 @@ class SmsGatewayConfigUpdate(BaseModel):
     provider: SmsProvider
     kavenegar_api_key: str | None = None
     kavenegar_sender: str | None = None
+    smsir_api_key: str | None = None
+    smsir_line_number: str | None = None
     generic_method: str = "GET"
     generic_url_template: str | None = None
     generic_auth_header_name: str | None = None
@@ -52,16 +54,20 @@ class SmsGatewayConfigUpdate(BaseModel):
     def _require_provider_fields(self) -> "SmsGatewayConfigUpdate":
         if self.provider == SmsProvider.GENERIC_HTTP and not self.generic_url_template:
             raise ValueError("برای سرویس پیامکی سفارشی باید الگوی آدرس تنظیم شود")
+        if self.provider == SmsProvider.SMS_IR and not self.smsir_line_number:
+            raise ValueError("برای sms.ir باید شماره خط تنظیم شود")
         return self
 
 
 class SmsGatewayConfigOut(BaseModel):
     provider: SmsProvider
     kavenegar_sender: str | None
+    smsir_line_number: str | None
     generic_method: str
     generic_url_template: str | None
     generic_auth_header_name: str | None
     has_kavenegar_api_key: bool
+    has_smsir_api_key: bool
     has_generic_auth_header_value: bool
 
 

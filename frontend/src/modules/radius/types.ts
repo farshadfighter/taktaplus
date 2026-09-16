@@ -1,4 +1,4 @@
-export type SmsProvider = "kavenegar" | "generic_http";
+export type SmsProvider = "kavenegar" | "sms_ir" | "generic_http";
 
 export interface TwoFactorUser {
   id: string;
@@ -20,9 +20,11 @@ export interface RadiusClient {
 export interface SmsGatewayConfig {
   provider: SmsProvider;
   kavenegar_sender: string | null;
+  smsir_line_number: string | null;
   generic_method: string;
   generic_url_template: string | null;
   generic_auth_header_name: string | null;
   has_kavenegar_api_key: boolean;
+  has_smsir_api_key: boolean;
   has_generic_auth_header_value: boolean;
 }

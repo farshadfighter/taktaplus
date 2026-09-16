@@ -161,6 +161,24 @@ def test_set_sms_config_updates_existing_row(db_session):
     assert decrypt_secret(config.encrypted_kavenegar_api_key) == "key123"
 
 
+def test_set_sms_config_sms_ir(db_session):
+    config = admin_service.set_sms_config(
+        db_session,
+        provider=SmsProvider.SMS_IR,
+        kavenegar_api_key=None,
+        kavenegar_sender=None,
+        smsir_api_key="smsir-key-123",
+        smsir_line_number="30001234",
+        generic_method="GET",
+        generic_url_template=None,
+        generic_auth_header_name=None,
+        generic_auth_header_value=None,
+        actor="admin",
+    )
+    assert decrypt_secret(config.encrypted_smsir_api_key) == "smsir-key-123"
+    assert config.smsir_line_number == "30001234"
+
+
 def test_prune_expired_challenges(db_session):
     from app.domains.radius.models import OtpChallenge
 

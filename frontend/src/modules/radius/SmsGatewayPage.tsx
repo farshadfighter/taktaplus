@@ -9,10 +9,12 @@ import { SmsGatewayConfig, SmsProvider } from "@/modules/radius/types";
 const EMPTY_CONFIG: SmsGatewayConfig = {
   provider: "generic_http",
   kavenegar_sender: null,
+  smsir_line_number: null,
   generic_method: "GET",
   generic_url_template: null,
   generic_auth_header_name: null,
   has_kavenegar_api_key: false,
+  has_smsir_api_key: false,
   has_generic_auth_header_value: false,
 };
 
@@ -23,6 +25,7 @@ export function SmsGatewayPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [kavenegarApiKey, setKavenegarApiKey] = useState("");
+  const [smsirApiKey, setSmsirApiKey] = useState("");
   const [genericAuthHeaderValue, setGenericAuthHeaderValue] = useState("");
 
   const [testMobile, setTestMobile] = useState("");
@@ -52,12 +55,15 @@ export function SmsGatewayPage() {
         provider: config.provider,
         kavenegar_api_key: kavenegarApiKey || undefined,
         kavenegar_sender: config.kavenegar_sender,
+        smsir_api_key: smsirApiKey || undefined,
+        smsir_line_number: config.smsir_line_number,
         generic_method: config.generic_method,
         generic_url_template: config.generic_url_template,
         generic_auth_header_name: config.generic_auth_header_name,
         generic_auth_header_value: genericAuthHeaderValue || undefined,
       });
       setKavenegarApiKey("");
+      setSmsirApiKey("");
       setGenericAuthHeaderValue("");
       await load();
     } catch (err: any) {
@@ -113,10 +119,11 @@ export function SmsGatewayPage() {
             onChange={(e) => setConfig({ ...config, provider: e.target.value as SmsProvider })}
           >
             <option value="kavenegar">کاوه‌نگار</option>
+            <option value="sms_ir">sms.ir</option>
             <option value="generic_http">سرویس سفارشی (HTTP)</option>
           </select>
 
-          {config.provider === "kavenegar" ? (
+          {config.provider === "kavenegar" && (
             <>
               <label>کلید API {config.has_kavenegar_api_key && "(از قبل تنظیم شده - برای تغییر پر کنید)"}</label>
               <input className="input" value={kavenegarApiKey} onChange={(e) => setKavenegarApiKey(e.target.value)} />
@@ -127,7 +134,23 @@ export function SmsGatewayPage() {
                 onChange={(e) => setConfig({ ...config, kavenegar_sender: e.target.value })}
               />
             </>
-          ) : (
+          )}
+
+          {config.provider === "sms_ir" && (
+            <>
+              <label>کلید API {config.has_smsir_api_key && "(از قبل تنظیم شده - برای تغییر پر کنید)"}</label>
+              <input className="input" value={smsirApiKey} onChange={(e) => setSmsirApiKey(e.target.value)} />
+              <label>شماره خط</label>
+              <input
+                className="input"
+                value={config.smsir_line_number ?? ""}
+                onChange={(e) => setConfig({ ...config, smsir_line_number: e.target.value })}
+                placeholder="مثلاً 30001234"
+              />
+            </>
+          )}
+
+          {config.provider === "generic_http" && (
             <>
               <label>متد</label>
               <select

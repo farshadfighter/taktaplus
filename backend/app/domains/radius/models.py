@@ -11,6 +11,7 @@ from app.db.types import GUID
 
 class SmsProvider(str, enum.Enum):
     KAVENEGAR = "kavenegar"
+    SMS_IR = "sms_ir"
     GENERIC_HTTP = "generic_http"
 
 
@@ -89,6 +90,12 @@ class SmsGatewayConfig(Base):
     # Kavenegar: just needs an API key.
     encrypted_kavenegar_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     kavenegar_sender: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    # sms.ir: an API key plus the account's line number (required by their
+    # /v1/send/bulk endpoint - see sms_gateway.py for the verified request
+    # shape).
+    encrypted_smsir_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    smsir_line_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # generic_http: a URL template with {mobile} and {code} placeholders,
     # for any provider that isn't Kavenegar - covers "customer brings their

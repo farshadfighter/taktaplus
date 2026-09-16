@@ -138,19 +138,23 @@ def get_sms_gateway(
         return SmsGatewayConfigOut(
             provider="generic_http",
             kavenegar_sender=None,
+            smsir_line_number=None,
             generic_method="GET",
             generic_url_template=None,
             generic_auth_header_name=None,
             has_kavenegar_api_key=False,
+            has_smsir_api_key=False,
             has_generic_auth_header_value=False,
         )
     return SmsGatewayConfigOut(
         provider=config.provider,
         kavenegar_sender=config.kavenegar_sender,
+        smsir_line_number=config.smsir_line_number,
         generic_method=config.generic_method,
         generic_url_template=config.generic_url_template,
         generic_auth_header_name=config.generic_auth_header_name,
         has_kavenegar_api_key=bool(config.encrypted_kavenegar_api_key),
+        has_smsir_api_key=bool(config.encrypted_smsir_api_key),
         has_generic_auth_header_value=bool(config.encrypted_generic_auth_header_value),
     )
 
@@ -166,6 +170,8 @@ def update_sms_gateway(
         provider=payload.provider,
         kavenegar_api_key=payload.kavenegar_api_key,
         kavenegar_sender=payload.kavenegar_sender,
+        smsir_api_key=payload.smsir_api_key,
+        smsir_line_number=payload.smsir_line_number,
         generic_method=payload.generic_method,
         generic_url_template=payload.generic_url_template,
         generic_auth_header_name=payload.generic_auth_header_name,
@@ -175,10 +181,12 @@ def update_sms_gateway(
     return SmsGatewayConfigOut(
         provider=config.provider,
         kavenegar_sender=config.kavenegar_sender,
+        smsir_line_number=config.smsir_line_number,
         generic_method=config.generic_method,
         generic_url_template=config.generic_url_template,
         generic_auth_header_name=config.generic_auth_header_name,
         has_kavenegar_api_key=bool(config.encrypted_kavenegar_api_key),
+        has_smsir_api_key=bool(config.encrypted_smsir_api_key),
         has_generic_auth_header_value=bool(config.encrypted_generic_auth_header_value),
     )
 
