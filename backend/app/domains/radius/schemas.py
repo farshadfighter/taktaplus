@@ -73,3 +73,10 @@ class SmsGatewayConfigOut(BaseModel):
 
 class TestSmsRequest(BaseModel):
     mobile_number: str
+
+
+class LocalUserCandidateOut(BaseModel):
+    username: str
+    source: str  # "admin" | "local_user"
+    existing_mobile: str | None
+    already_linked: bool

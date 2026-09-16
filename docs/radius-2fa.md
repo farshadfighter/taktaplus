@@ -41,6 +41,45 @@ user then retries with password+code appended and succeeds. This is a
 real limitation of IPsec's RADIUS usage, not a bug - document it for
 whoever configures the VPN client's retry/prompt behavior.
 
+## Linking a TwoFactorUser: import the username, but not the password
+
+A `TwoFactorUser` isn't created from scratch by typing a brand-new
+username - `GET /devices/{device_id}/local-users` (FortiGate only for now)
+reads the device's actual local admin accounts (`system/admin`) and
+password-type local VPN/IPsec XAuth users (`user/local`, filtered to
+`type == "password"` - radius/ldap/tacacs+-backed local user objects
+delegate their password elsewhere already, so they aren't a fit here) via
+its own CMDB REST API, so the operator picks a real, already-existing
+username instead of retyping one and risking a typo or drift against
+what's actually configured on the device.
+
+The primary **password is the one thing that can never be imported** -
+Fortinet never exposes a local user's existing password through the API
+(one-way hashed, by design, like any sane auth system). So after picking a
+username, the operator still has to type a password into taktaplus by
+hand, and it has to be kept manually in sync with whatever's actually set
+on the device - if they ever differ, RADIUS auth for that user simply
+fails. This is a real, inherent limitation of "RADIUS as the primary auth
+backend" (not just a secondary bolt-on) rather than something taktaplus
+could paper over; the two alternatives - having FortiGate call RADIUS only
+as a secondary factor after its own local check, or having taktaplus reset
+the device's local password to a value it knows - were both considered and
+rejected: the former is a materially different RADIUS integration than the
+one already built and tested end-to-end, and the latter means taktaplus
+silently invalidates whatever password the person already uses.
+
+If a local user already has FortiGate's own native SMS-2FA `sms-phone`
+field set (a *separate*, non-RADIUS feature FortiGate has built in), that
+number is surfaced as `existing_mobile` and pre-fills the mobile number
+field when picked - one less manual step, since that's a value taktaplus
+*can* read.
+
+Verified end to end against a real (self-signed, locally hosted) HTTPS
+server standing in for FortiGate's REST API, not just unit-tested against
+mocks: a real browser driving the actual "دریافت لیست کاربران" UI flow,
+correctly merging admin users and password-type local users, excluding a
+radius-backed local user, and pre-filling username/mobile on pick.
+
 ## Two real pyrad bugs found via protocol-level testing
 
 Both were found running a real `pyrad` client against a real server (not

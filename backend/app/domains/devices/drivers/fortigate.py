@@ -6,7 +6,7 @@ import time
 import httpx
 import paramiko
 
-from app.domains.devices.drivers.base import DeviceConnectionError, DeviceStatusInfo, FortinetDriver
+from app.domains.devices.drivers.base import DeviceConnectionError, DeviceStatusInfo, FortinetDriver, LocalUserCandidate
 
 
 class FortiGateDriver(FortinetDriver):
@@ -121,6 +121,66 @@ class FortiGateDriver(FortinetDriver):
             )
         if response.status_code != 200:
             raise DeviceConnectionError(f"FortiGate پاسخ غیرمنتظره {response.status_code} برگرداند")
+
+    def list_local_users(self) -> list[LocalUserCandidate]:
+        """Local admin accounts (system/admin) and password-type SSL VPN/
+        IPsec XAuth local users (user/local) already configured on the
+        device - candidates to link to a taktaplus TwoFactorUser instead of
+        typing a username from scratch (see docs/radius-2fa.md).
+
+        Field names (`name`, `sms-phone`, `type`, `accprofile`) come from
+        FortiOS's CLI config schema, which the CMDB API mirrors exactly -
+        confirmed via FortiOS CLI reference and Fortinet's own Ansible
+        collection schema (docs.fortinet.com itself is blocked by this
+        environment's egress proxy, so it couldn't be fetched directly).
+        UNVERIFIED AGAINST REAL HARDWARE - the request/response mechanics
+        (CMDB list GET, the `results` envelope) match every other CMDB/
+        monitor call already verified elsewhere in this driver, but this
+        specific pair of endpoints hasn't been.
+
+        Only `type == "password"` local users are returned - a radius/
+        ldap/tacacs+-backed local user object delegates its password
+        elsewhere already, so it isn't a fit for taktaplus's own RADIUS 2FA
+        (which needs to check a password value it holds itself).
+        """
+        try:
+            with self._client() as client:
+                admin_response = client.get(
+                    f"{self.base_url}/api/v2/cmdb/system/admin",
+                    params={"vdom": self.vdom},
+                    headers=self._auth_headers(),
+                )
+                local_response = client.get(
+                    f"{self.base_url}/api/v2/cmdb/user/local",
+                    params={"vdom": self.vdom},
+                    headers=self._auth_headers(),
+                )
+        except httpx.HTTPError as exc:
+            raise DeviceConnectionError(f"دریافت لیست کاربران از FortiGate ناموفق بود: {exc}") from exc
+
+        if admin_response.status_code == 401 or local_response.status_code == 401:
+            raise DeviceConnectionError("توکن API نامعتبر است یا دسترسی کافی ندارد")
+        if admin_response.status_code != 200 or local_response.status_code != 200:
+            raise DeviceConnectionError(
+                f"FortiGate پاسخ غیرمنتظره برگرداند ({admin_response.status_code}/{local_response.status_code})"
+            )
+
+        try:
+            admins = admin_response.json()["results"]
+            locals_ = local_response.json()["results"]
+        except (KeyError, ValueError) as exc:
+            raise DeviceConnectionError("پاسخ FortiGate قابل تفسیر نبود") from exc
+
+        candidates = [
+            LocalUserCandidate(username=entry["name"], source="admin", existing_mobile=entry.get("sms-phone") or None)
+            for entry in admins
+        ]
+        candidates += [
+            LocalUserCandidate(username=entry["name"], source="local_user", existing_mobile=entry.get("sms-phone") or None)
+            for entry in locals_
+            if entry.get("type") == "password"
+        ]
+        return candidates
 
     def push_signature_via_ftp(
         self,

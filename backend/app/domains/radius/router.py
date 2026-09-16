@@ -5,9 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.deps import require_permission
 from app.db.session import get_db
+from app.domains.devices.drivers import DeviceConnectionError, get_driver
+from app.domains.devices.service import get_device
 from app.domains.identity.models import User
 from app.domains.radius import admin_service
 from app.domains.radius.schemas import (
+    LocalUserCandidateOut,
     RadiusClientCreate,
     RadiusClientOut,
     SmsGatewayConfigOut,
@@ -16,9 +19,48 @@ from app.domains.radius.schemas import (
     TwoFactorUserCreate,
     TwoFactorUserOut,
 )
+from app.domains.radius.service import get_user_by_username
 from app.domains.radius.sms_gateway import SmsSendError, send_otp_sms
 
 router = APIRouter(tags=["radius"])
+
+
+@router.get("/devices/{device_id}/local-users", response_model=list[LocalUserCandidateOut])
+def list_device_local_users(
+    device_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission("radius:read")),
+) -> list[LocalUserCandidateOut]:
+    """Existing local admin/VPN accounts already configured on the device -
+    lets an operator pick a username for 2FA instead of retyping it (and
+    risking a typo/drift against what's actually on the device). The
+    primary password still can't come from here (Fortinet never exposes
+    it), so create_two_factor_user still needs it typed in separately.
+    """
+    device = get_device(db, device_id)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="دستگاه یافت نشد")
+
+    driver = get_driver(device)
+    try:
+        candidates = driver.list_local_users()
+    except NotImplementedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="این قابلیت هنوز برای این نوع تجهیز پیاده‌سازی نشده است",
+        ) from exc
+    except DeviceConnectionError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    return [
+        LocalUserCandidateOut(
+            username=c.username,
+            source=c.source,
+            existing_mobile=c.existing_mobile,
+            already_linked=get_user_by_username(db, c.username) is not None,
+        )
+        for c in candidates
+    ]
 
 
 @router.get("/radius/users", response_model=list[TwoFactorUserOut])

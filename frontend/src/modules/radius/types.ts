@@ -28,3 +28,10 @@ export interface SmsGatewayConfig {
   has_smsir_api_key: boolean;
   has_generic_auth_header_value: boolean;
 }
+
+export interface LocalUserCandidate {
+  username: string;
+  source: "admin" | "local_user";
+  existing_mobile: string | null;
+  already_linked: boolean;
+}

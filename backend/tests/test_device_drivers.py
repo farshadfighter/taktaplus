@@ -325,6 +325,52 @@ def test_fortigate_push_firmware_success():
     driver.push_firmware(b"fake-firmware-image")  # should not raise
 
 
+def test_fortigate_list_local_users_merges_admins_and_password_local_users():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v2/cmdb/system/admin":
+            return httpx.Response(
+                200,
+                json={"results": [{"name": "admin", "sms-phone": "0912"}, {"name": "netops"}]},
+            )
+        if request.url.path == "/api/v2/cmdb/user/local":
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {"name": "vpnuser1", "type": "password", "sms-phone": ""},
+                        {"name": "radius-backed", "type": "radius"},
+                    ]
+                },
+            )
+        return httpx.Response(404)
+
+    driver = FortiGateDriver(
+        host="10.0.0.1", port=443, token="tok", verify_tls=False, transport=httpx.MockTransport(handler)
+    )
+
+    candidates = driver.list_local_users()
+
+    by_username = {c.username: c for c in candidates}
+    assert by_username["admin"].source == "admin"
+    assert by_username["admin"].existing_mobile == "0912"
+    assert by_username["netops"].existing_mobile is None
+    assert by_username["vpnuser1"].source == "local_user"
+    assert "radius-backed" not in by_username  # not a password-type local user
+
+
+def test_fortigate_list_local_users_raises_on_invalid_token():
+    transport = httpx.MockTransport(lambda request: httpx.Response(401))
+    driver = FortiGateDriver(host="10.0.0.1", port=443, token="bad", verify_tls=False, transport=transport)
+    with pytest.raises(DeviceConnectionError):
+        driver.list_local_users()
+
+
+def test_fortiweb_list_local_users_not_implemented():
+    driver = FortiWebDriver(host="10.0.0.2", port=443, username="admin", password="x", verify_tls=False)
+    with pytest.raises(NotImplementedError):
+        driver.list_local_users()
+
+
 def test_fortiweb_push_signature_success():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/logincheck":
