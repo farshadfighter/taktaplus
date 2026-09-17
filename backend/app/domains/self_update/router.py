@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
-from app.api.v1.deps import require_permission
+from app.api.v1.deps import get_current_user, require_permission
 from app.domains.self_update.service import (
     InvalidUpdatePackage,
     get_current_version,
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/self-update", tags=["self-update"])
 
 
 @router.get("/version")
-def current_version() -> dict:
+def current_version(_=Depends(get_current_user)) -> dict:
     return {"version": get_current_version()}
 
 
