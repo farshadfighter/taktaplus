@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # Offline signature/firmware distribution (phase 4) - see
     # docs/signature-distribution.md.
     packages_root: str = "/var/lib/taktaplus/packages"
+    # Firmware images legitimately run into the hundreds of MB, so this is
+    # generous - it exists only to bound a single authenticated upload
+    # (packages:manage), not to constrain normal use.
+    max_package_upload_mb: int = 4096
 
     # The internal FTP relay FortiGate devices pull signature packages from
     # (taktaplus is both an FTP *client* to the upstream source above, and

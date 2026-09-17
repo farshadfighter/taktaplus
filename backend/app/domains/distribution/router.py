@@ -85,7 +85,18 @@ async def upload_package(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("packages:manage")),
 ) -> PackageOut:
-    content = await file.read()
+    max_bytes = get_settings().max_package_upload_mb * 1024 * 1024
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(1024 * 1024):
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"حجم فایل بیش از حد مجاز ({get_settings().max_package_upload_mb} مگابایت) است",
+            )
+        chunks.append(chunk)
+    content = b"".join(chunks)
     package = service.save_uploaded_package(
         db,
         vendor_type=vendor_type,
