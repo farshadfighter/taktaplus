@@ -38,6 +38,53 @@
   هر ارائه‌دهنده دیگر) - برخلاف منبع FTP فاز ۴، هیچ حساب پیش‌فرضی وجود ندارد.
   جزئیات کامل در `docs/radius-2fa.md`.
 
+## بازبینی امنیتی جامع (بعد از فاز ۵)
+
+قبل از رفتن سراغ License Server، یک بازبینی کامل (نه فقط دیف آخرین کامیت) روی
+کل کدبیس backend/frontend انجام شد. باگ‌های واقعی پیدا و رفع شدن، نه فرضی:
+
+- **Path traversal + تزریق دستور CLI روی SSH**: نام فایل بسته (از آپلود
+  کاربر) و `package_type` (از لیست دایرکتوری سرور FTP منبع) بدون پاکسازی وارد
+  `os.path.join` و یک دستور SSH تعاملی به FortiGate (`push_signature_via_ftp`)
+  می‌شدن؛ یک newline می‌تونست دستور CLI دلخواه تزریق کنه. یک allowlist
+  سخت‌گیرانه (`validate_safe_package_name`) الان یک‌بار در نقطه ساخت هر
+  `Package` (هم آپلود دستی، هم sync از FTP) اجرا می‌شه؛ sync از FTP فقط
+  ردیف‌های ناامن رو skip می‌کنه، کل sync شبانه رو abort نمی‌کنه.
+- **بدون محافظت brute-force روی `/auth/login`**: برخلاف کاربران 2FA رادیوس که
+  از قبل قفل‌شدن داشتن، اکانت‌های ادمین خودِ پنل هیچ محدودیتی نداشتن. همون
+  الگوی قفل‌شدن (۵ تلاش ناموفق پیش‌فرض → ۱۵ دقیقه قفل، `User.failed_attempts`/
+  `locked_until`) اضافه شد.
+- **آپلود بسته بدون سقف حجم**: یک اکانت operator می‌تونست دیسک رو با آپلود
+  نامحدود پر کنه. یک سقف قابل‌تنظیم (`TAKTAPLUS_MAX_PACKAGE_UPLOAD_MB`،
+  پیش‌فرض ۴۰۹۶ - برای فرم‌ور واقعی کافیه) با streaming read اضافه شد.
+- **`GET /self-update/version` بدون هیچ auth**: برخلاف بقیه endpoint ها، هیچ
+  `Depends` ای نداشت - هرکسی بدون توکن می‌تونست نسخه دقیق taktaplus در حال
+  اجرا رو بفهمه (مفید برای پیدا کردن CVE مربوط به همون نسخه). مثل
+  `/license/status` به `get_current_user` گیت شد.
+- **N+1 روی `GET /devices/{id}/local-users`**: محاسبه `already_linked` برای
+  هر کاندیدا یک کوئری جدا می‌زد. با یک کوئری batched (`get_linked_usernames`)
+  جایگزین شد - همون الگوی fix که قبلاً روی گزارش fleet-status اعمال شده بود.
+- **کرش ۵۰۰ روی نام کاربری تکراری 2FA**: `create_two_factor_user` فقط به
+  unique constraint دیتابیس تکیه می‌کرد، پس یک تلاش تکراری (که با فیچر
+  «افزودن کاربر از روی دستگاه» محتمل‌تر شده) به‌جای پیام خطای قابل‌فهم، یک
+  `IntegrityError` خام و ۵۰۰ برمی‌گردوند. الان ۴۰۹ با پیام فارسی برمی‌گردونه.
+- **CORS origin هاردکد شده**: `allow_origins=["http://localhost:5173"]` فقط
+  با تاپولوژی dev docker-compose جواب می‌داد. الان از
+  `TAKTAPLUS_CORS_ALLOWED_ORIGINS` (comma-separated) خونده می‌شه، پیش‌فرض
+  همون مقدار قبلی رو حفظ می‌کنه.
+
+موارد بررسی‌شده و **بدون تغییر** (تصمیم آگاهانه، نه سهل‌انگاری):
+- CORS/فرانت‌اند dev-mode (Vite dev server، نه build نهایی nginx) - از قبل در
+  `frontend/Dockerfile` مستند شده که باید قبل از دیپلوی مشتری عوض بشه.
+- `paramiko.AutoAddPolicy()` (TOFU، بدون pin کردن host key) روی درایور
+  FortiGate - برای یک ابزار مدیریت داخلی روی شبکه مدیریتی، trade-off معقولیه؛
+  پیاده‌سازی pinning واقعی نیاز به UI تایید/نگهداری fingerprint داره که خارج
+  از اسکوپ این بازبینیه.
+- عدم وجود CRUD کامل برای اکانت‌های ادمین خودِ taktaplus (فقط login/refresh/me)
+  - یعنی فعلاً unlock حساب قفل‌شده فقط با گذشت زمان (۱۵ دقیقه) ممکنه، نه از
+  طریق API؛ اگه بعداً یک پنل مدیریت کاربر کامل اضافه بشه، اندپوینت unlock هم
+  جای طبیعی‌ای برای اضافه شدنه.
+
 ## Stack
 
 - **Backend**: FastAPI, SQLAlchemy 2.0, Alembic, PostgreSQL, Celery+Redis
