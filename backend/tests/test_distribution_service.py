@@ -80,6 +80,60 @@ def test_save_uploaded_package_writes_file_and_row(db_session, tmp_path, monkeyp
         assert fh.read() == b"hello"
 
 
+@pytest.mark.parametrize("value", ["ok", "OK-1.2.3_final", "a", "a.b.c"])
+def test_validate_safe_package_name_accepts_legitimate_names(value):
+    assert service.validate_safe_package_name(value, what="x") == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "../../etc/passwd",
+        "..",
+        "foo/bar",
+        "foo\nexecute factoryreset\n",
+        "foo bar",
+        "foo;rm -rf /",
+        "",
+        ".hidden",
+        "trailing-dot.",
+    ],
+)
+def test_validate_safe_package_name_rejects_unsafe_names(value):
+    with pytest.raises(service.UnsafeNameError):
+        service.validate_safe_package_name(value, what="x")
+
+
+def test_save_uploaded_package_rejects_path_traversal_filename(db_session, tmp_path, monkeypatch):
+    monkeypatch.setattr("app.domains.distribution.service.get_settings", lambda: type("S", (), {"packages_root": str(tmp_path)})())
+
+    with pytest.raises(service.UnsafeNameError):
+        service.save_uploaded_package(
+            db_session,
+            vendor_type=VendorType.FORTIGATE,
+            package_type="ips",
+            filename="../../etc/passwd",
+            content=b"hello",
+            actor="tester",
+        )
+
+    assert not (tmp_path / ".." / ".." / "etc" / "passwd").exists()
+
+
+def test_save_uploaded_package_rejects_command_injection_via_newline(db_session, tmp_path, monkeypatch):
+    monkeypatch.setattr("app.domains.distribution.service.get_settings", lambda: type("S", (), {"packages_root": str(tmp_path)})())
+
+    with pytest.raises(service.UnsafeNameError):
+        service.save_uploaded_package(
+            db_session,
+            vendor_type=VendorType.FORTIGATE,
+            package_type="ips\nexecute factoryreset\n",
+            filename="pkg.bin",
+            content=b"hello",
+            actor="tester",
+        )
+
+
 def test_delete_package_removes_file_and_row(db_session, tmp_path):
     package = _make_package(db_session, tmp_path)
     path = package.local_path

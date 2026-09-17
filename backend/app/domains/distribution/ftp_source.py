@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.security import decrypt_secret
 from app.domains.distribution.models import FtpSourceConfig, Package, PackageSource
+from app.domains.distribution.service import UnsafeNameError, validate_safe_package_name
 
 VENDOR_DIRS = ("fortigate", "fortiweb")
 
@@ -122,6 +123,16 @@ def sync_from_ftp(db: Session, *, packages_root: str) -> dict:
             # than trusting what comes back to already be a full path.
             for package_type_name in package_type_names:
                 package_type = os.path.basename(package_type_name.rstrip("/"))
+                try:
+                    package_type = validate_safe_package_name(package_type, what="نوع بسته")
+                except UnsafeNameError:
+                    # An untrusted FTP source (vendor or customer-configured)
+                    # published a directory name that isn't safe to use as a
+                    # filesystem path component or in the SSH push command
+                    # downstream - skip just this entry rather than aborting
+                    # the whole unattended sync over one bad name.
+                    skipped += 1
+                    continue
                 package_type_path = f"{vendor_path}/{package_type}"
                 try:
                     file_names = ftp.nlst(package_type_path)
@@ -131,6 +142,11 @@ def sync_from_ftp(db: Session, *, packages_root: str) -> dict:
                 for file_name in file_names:
                     filename = os.path.basename(file_name.rstrip("/"))
                     if not filename or _already_imported(db, vendor, package_type, filename):
+                        skipped += 1
+                        continue
+                    try:
+                        filename = validate_safe_package_name(filename, what="نام فایل")
+                    except UnsafeNameError:
                         skipped += 1
                         continue
 

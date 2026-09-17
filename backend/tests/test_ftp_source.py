@@ -103,3 +103,53 @@ def test_resolve_effective_config_raises_without_any_source(db_session, monkeypa
         resolve_effective_config(db_session)
 
     get_settings.cache_clear()
+
+
+@pytest.fixture
+def malicious_vendor_ftp_server(tmp_path):
+    """A real FTP server whose vendor-provided (untrusted) file/directory
+    names include ones unsafe for a filesystem path component and for the
+    SSH command they're later interpolated into - the same class of names a
+    compromised or malicious FTP source could publish. Proves sync_from_ftp
+    skips just those entries instead of writing outside packages_root or
+    crashing the whole (unattended, nightly) sync.
+    """
+    root = tmp_path / "vendor-ftp-root"
+    (root / "fortigate" / "ips").mkdir(parents=True)
+    (root / "fortigate" / "ips" / "ips-7.2.1.pkg").write_bytes(b"fake ips package v1")
+    (root / "fortigate" / "ips" / "bad name.pkg").write_bytes(b"unsafe filename")
+    (root / "fortigate" / "..evil..").mkdir(parents=True)
+    (root / "fortigate" / "..evil.." / "x.pkg").write_bytes(b"unsafe package_type dir")
+
+    authorizer = DummyAuthorizer()
+    authorizer.add_user("vendor", "vendorpass", str(root), perm="elr")
+    handler = FTPHandler
+    handler.authorizer = authorizer
+    server = FTPServer(("127.0.0.1", 0), handler)
+    port = server.socket.getsockname()[1]
+
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield port
+    server.close_all()
+
+
+def test_sync_from_ftp_skips_unsafe_names_without_crashing(db_session, malicious_vendor_ftp_server, tmp_path, monkeypatch):
+    monkeypatch.setenv("TAKTAPLUS_DEFAULT_FTP_HOST", "127.0.0.1")
+    monkeypatch.setenv("TAKTAPLUS_DEFAULT_FTP_PORT", str(malicious_vendor_ftp_server))
+    monkeypatch.setenv("TAKTAPLUS_DEFAULT_FTP_USERNAME", "vendor")
+    monkeypatch.setenv("TAKTAPLUS_DEFAULT_FTP_PASSWORD", "vendorpass")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    packages_root = str(tmp_path / "packages")
+    result = sync_from_ftp(db_session, packages_root=packages_root)
+
+    packages = db_session.query(Package).all()
+    assert {p.filename for p in packages} == {"ips-7.2.1.pkg"}
+    assert result["imported"] == 1
+    assert result["skipped"] >= 2
+    assert not os.path.exists(os.path.join(packages_root, "fortigate", "..evil.."))
+
+    get_settings.cache_clear()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,6 +20,30 @@ from app.domains.distribution.models import FtpSourceConfig, Package, PackageSou
 
 class DistributionError(RuntimeError):
     pass
+
+
+class UnsafeNameError(DistributionError):
+    """A filename or package_type came from an untrusted source (an
+    uploaded file's own client-supplied name, or a remote FTP server's own
+    directory/file listing) and isn't safe to use as-is. Both values end
+    up as filesystem path components (os.path.join - a `/` or `..` enables
+    path traversal / arbitrary file write) *and* interpolated straight
+    into an interactive SSH CLI command sent to a FortiGate
+    (push_signature_via_ftp - a newline there injects an extra CLI
+    command). A strict allowlist, not best-effort cleaning, is what
+    actually closes both, and it's enforced once here at creation time so
+    every later consumer of Package.filename/package_type - the SSH push,
+    audit log, delete, disk path - can trust it's already safe.
+    """
+
+
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
+
+
+def validate_safe_package_name(value: str, *, what: str) -> str:
+    if not _SAFE_NAME_RE.match(value):
+        raise UnsafeNameError(f"{what} نامعتبر است - فقط حروف/عدد انگلیسی، نقطه، خط تیره و زیرخط مجاز است")
+    return value
 
 
 def get_ftp_config(db: Session) -> FtpSourceConfig | None:
@@ -72,6 +97,9 @@ def save_uploaded_package(
     content: bytes,
     actor: str,
 ) -> Package:
+    package_type = validate_safe_package_name(package_type, what="نوع بسته")
+    filename = validate_safe_package_name(filename, what="نام فایل")
+
     settings = get_settings()
     local_dir = os.path.join(settings.packages_root, vendor_type.value, package_type)
     os.makedirs(local_dir, exist_ok=True)
