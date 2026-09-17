@@ -11,6 +11,13 @@ class Settings(BaseSettings):
 
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
+
+    # Comma-separated list of origins the frontend is served from - the
+    # default matches the Vite dev server in docker-compose.yml. Override
+    # for any other deployment topology (a reverse proxy, a custom domain,
+    # a production nginx build served from somewhere else) rather than
+    # editing app/main.py.
+    cors_allowed_origins: str = "http://localhost:5173"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_minutes: int = 60 * 24 * 7
 
