@@ -3,10 +3,10 @@ from fastapi import HTTPException
 
 from app.core.auth import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 from app.domains.identity.models import Role, User
-from app.domains.identity.router import refresh
-from app.domains.identity.schemas import RefreshRequest
+from app.domains.identity.router import login, refresh
+from app.domains.identity.schemas import LoginRequest, RefreshRequest
 from app.domains.identity.seed_roles import DEFAULT_ROLES
-from app.domains.identity.service import authenticate_user
+from app.domains.identity.service import AccountLockedError, authenticate_user
 
 
 def test_password_hash_round_trip():
@@ -91,3 +91,72 @@ def test_refresh_rejects_disabled_user(db_session):
 
     with pytest.raises(HTTPException):
         refresh(RefreshRequest(refresh_token=refresh_token), db_session)
+
+
+def test_login_locks_account_after_repeated_failures(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.domains.identity.service.get_settings",
+        lambda: type("S", (), {"login_lockout_threshold": 3, "login_lockout_minutes": 15})(),
+    )
+    _make_user(db_session)
+
+    for _ in range(3):
+        assert authenticate_user(db_session, "alice", "wrong") is None
+
+    with pytest.raises(AccountLockedError):
+        authenticate_user(db_session, "alice", "s3cret")
+
+
+def test_login_success_resets_failed_attempts(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.domains.identity.service.get_settings",
+        lambda: type("S", (), {"login_lockout_threshold": 3, "login_lockout_minutes": 15})(),
+    )
+    _make_user(db_session)
+
+    assert authenticate_user(db_session, "alice", "wrong") is None
+    assert authenticate_user(db_session, "alice", "wrong") is None
+    assert authenticate_user(db_session, "alice", "s3cret") is not None
+
+    # A successful login clears the counter - the two prior failures don't
+    # carry over toward a future lockout.
+    assert authenticate_user(db_session, "alice", "wrong") is None
+    assert authenticate_user(db_session, "alice", "wrong") is None
+    assert authenticate_user(db_session, "alice", "s3cret") is not None
+
+
+def test_login_lockout_expires_after_cooldown(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.domains.identity.service.get_settings",
+        lambda: type("S", (), {"login_lockout_threshold": 1, "login_lockout_minutes": 15})(),
+    )
+    user = _make_user(db_session)
+
+    assert authenticate_user(db_session, "alice", "wrong") is None
+    with pytest.raises(AccountLockedError):
+        authenticate_user(db_session, "alice", "s3cret")
+
+    from datetime import datetime, timedelta, timezone
+
+    user.locked_until = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db_session.commit()
+
+    assert authenticate_user(db_session, "alice", "s3cret") is not None
+
+
+def test_login_endpoint_returns_401_with_locked_message(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "app.domains.identity.service.get_settings",
+        lambda: type("S", (), {"login_lockout_threshold": 1, "login_lockout_minutes": 15})(),
+    )
+    _make_user(db_session)
+
+    with pytest.raises(HTTPException):
+        login(LoginRequest(username="alice", password="wrong"), db_session)
+
+    try:
+        login(LoginRequest(username="alice", password="s3cret"), db_session)
+        assert False, "expected HTTPException for a locked account"
+    except HTTPException as exc:
+        assert exc.status_code == 401
+        assert "قفل" in exc.detail

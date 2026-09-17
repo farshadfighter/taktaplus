@@ -100,6 +100,13 @@ class Settings(BaseSettings):
     otp_lockout_threshold: int = 5
     otp_lockout_minutes: int = 15
 
+    # Brute-force protection for the admin login endpoint (/auth/login) -
+    # separate from the RADIUS/OTP lockout above, which only covers
+    # TwoFactorUser (SMS 2FA end users), not the operator accounts that log
+    # into this app itself.
+    login_lockout_threshold: int = 5
+    login_lockout_minutes: int = 15
+
 
 @lru_cache
 def get_settings() -> Settings:

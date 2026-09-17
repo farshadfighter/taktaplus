@@ -7,14 +7,22 @@ from app.db.session import get_db
 from app.domains.audit.service import record_audit_event
 from app.domains.identity.models import User
 from app.domains.identity.schemas import LoginRequest, RefreshRequest, TokenResponse, UserOut
-from app.domains.identity.service import authenticate_user, get_user_by_id
+from app.domains.identity.service import AccountLockedError, authenticate_user, get_user_by_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    user = authenticate_user(db, payload.username, payload.password)
+    try:
+        user = authenticate_user(db, payload.username, payload.password)
+    except AccountLockedError:
+        record_audit_event(db, actor=payload.username, action="auth.login.locked", target=payload.username)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="حساب کاربری به دلیل تلاش‌های ناموفق مکرر موقتاً قفل شده است",
+        )
+
     if user is None:
         record_audit_event(db, actor=payload.username, action="auth.login.failed", target=payload.username)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="نام کاربری یا رمز عبور اشتباه است")
