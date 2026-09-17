@@ -48,6 +48,17 @@ def test_create_two_factor_user_enforces_seat_quota(db_session):
         admin_service.create_two_factor_user(db_session, username="b", password="p", mobile_number="m", actor="admin")
 
 
+def test_create_two_factor_user_rejects_duplicate_username(db_session):
+    _grant_license(db_session)
+    admin_service.create_two_factor_user(db_session, username="alice", password="p", mobile_number="m", actor="admin")
+
+    with pytest.raises(admin_service.DuplicateUsernameError):
+        admin_service.create_two_factor_user(db_session, username="alice", password="p2", mobile_number="m2", actor="admin")
+
+    # the failed attempt's rollback shouldn't have wiped the first user out
+    assert admin_service.count_two_factor_users(db_session) == 1
+
+
 def test_set_enabled_false_does_not_clear_lock(db_session):
     _grant_license(db_session)
     user = admin_service.create_two_factor_user(

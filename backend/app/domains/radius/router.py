@@ -78,13 +78,16 @@ def create_two_factor_user(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("radius:manage")),
 ) -> TwoFactorUserOut:
-    created = admin_service.create_two_factor_user(
-        db,
-        username=payload.username,
-        password=payload.password,
-        mobile_number=payload.mobile_number,
-        actor=user.username,
-    )
+    try:
+        created = admin_service.create_two_factor_user(
+            db,
+            username=payload.username,
+            password=payload.password,
+            mobile_number=payload.mobile_number,
+            actor=user.username,
+        )
+    except admin_service.DuplicateUsernameError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return TwoFactorUserOut.model_validate(created)
 
 

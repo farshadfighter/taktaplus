@@ -6,12 +6,17 @@ in service.py and is only ever driven by the RADIUS server process.
 from __future__ import annotations
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.security import encrypt_secret
 from app.domains.audit.service import record_audit_event
 from app.domains.licensing.service import enforce_2fa_seat_quota, lock_license_for_update
 from app.domains.radius.models import OtpChallenge, RadiusClient, SmsGatewayConfig, SmsProvider, TwoFactorUser
+
+
+class DuplicateUsernameError(RuntimeError):
+    pass
 
 
 def count_two_factor_users(db: Session) -> int:
@@ -41,7 +46,11 @@ def create_two_factor_user(
         encrypted_mobile_number=encrypt_secret(mobile_number),
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise DuplicateUsernameError(f"کاربری با نام «{username}» قبلاً ثبت شده است") from exc
     db.refresh(user)
     record_audit_event(db, actor=actor, action="radius_user.create", target=username)
     return user
