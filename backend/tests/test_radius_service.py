@@ -182,3 +182,16 @@ def test_nonexistent_user_rejects(db_session, _stub_sms):
 
     result = service.authenticate(db_session, username="ghost", password="whatever")
     assert result.result == "reject"
+
+
+def test_get_linked_usernames_batches_lookup(db_session):
+    _make_user(db_session, username="alice")
+    _make_user(db_session, username="bob", mobile="09120000001")
+
+    linked = service.get_linked_usernames(db_session, ["alice", "carol", "bob"])
+
+    assert linked == {"alice", "bob"}
+
+
+def test_get_linked_usernames_empty_input_returns_empty_set(db_session):
+    assert service.get_linked_usernames(db_session, []) == set()

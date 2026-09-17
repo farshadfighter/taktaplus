@@ -19,7 +19,7 @@ from app.domains.radius.schemas import (
     TwoFactorUserCreate,
     TwoFactorUserOut,
 )
-from app.domains.radius.service import get_user_by_username
+from app.domains.radius.service import get_linked_usernames
 from app.domains.radius.sms_gateway import SmsSendError, send_otp_sms
 
 router = APIRouter(tags=["radius"])
@@ -52,12 +52,13 @@ def list_device_local_users(
     except DeviceConnectionError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
+    linked = get_linked_usernames(db, [c.username for c in candidates])
     return [
         LocalUserCandidateOut(
             username=c.username,
             source=c.source,
             existing_mobile=c.existing_mobile,
-            already_linked=get_user_by_username(db, c.username) is not None,
+            already_linked=c.username in linked,
         )
         for c in candidates
     ]

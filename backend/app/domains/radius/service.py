@@ -51,6 +51,17 @@ def get_user_by_username(db: Session, username: str) -> TwoFactorUser | None:
     return db.scalar(select(TwoFactorUser).where(TwoFactorUser.username == username))
 
 
+def get_linked_usernames(db: Session, usernames: list[str]) -> set[str]:
+    """Which of these usernames already have a TwoFactorUser - one query
+    for the whole batch, used by the device local-users listing instead of
+    a per-candidate get_user_by_username lookup (avoids an N+1 when a
+    device has many local accounts).
+    """
+    if not usernames:
+        return set()
+    return set(db.scalars(select(TwoFactorUser.username).where(TwoFactorUser.username.in_(usernames))))
+
+
 def get_sms_config(db: Session) -> SmsGatewayConfig | None:
     return db.scalar(select(SmsGatewayConfig).limit(1))
 
