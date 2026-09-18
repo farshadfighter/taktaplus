@@ -15,9 +15,19 @@ management server itself sits on.
 
 ## Contract this repo depends on
 
-Implemented today by `dev/mock-license-server/app.py` for local development
-only. The real License Server (separate repo, built later) MUST implement
-the same shapes so `app/domains/licensing/client.py` doesn't need to change.
+Implemented for local development by `dev/mock-license-server/app.py`
+(throwaway - always grants a fresh 365-day window on every call, no
+persistence). The real License Server now exists as its own product:
+https://github.com/farshadfighter/taktapluslicense - real persisted
+licenses/entitlements set by the vendor, a customer_key generator (80 bits
+of entropy), an admin panel to issue/suspend/renew licenses and see which
+fingerprints have activated each one, and the same two endpoints below.
+Verified end to end against taktaplus's actual `LicenseServerClient` and
+`app/domains/licensing/service.py` (not just against the documented shapes)
+- activate, heartbeat with token rotation, stale-token rejection, unknown
+customer_key rejection, and suspension all confirmed working through the
+full stack, including that a suspension made in the License Server's admin
+panel is picked up by taktaplus's very next heartbeat.
 
 ### `POST /api/v1/activate`
 

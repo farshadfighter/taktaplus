@@ -90,7 +90,9 @@
 - **Backend**: FastAPI, SQLAlchemy 2.0, Alembic, PostgreSQL, Celery+Redis
 - **Frontend**: React 18, TypeScript, Vite (RTL از پایه)
 - **رمزنگاری**: AES-256-GCM سطح اپلیکیشن برای credential ها (`app/core/security.py`)
-- **لایسنسینگ**: اتصال آنلاین به License Server (محصول/ریپوی جدا، بعداً ساخته می‌شود) — قرارداد API در `docs/licensing.md`
+- **لایسنسینگ**: اتصال آنلاین به License Server - محصول/ریپوی جداییه که الان
+  ساخته شده: https://github.com/farshadfighter/taktapluslicense (قرارداد API
+  و جزئیات تایید end-to-end در `docs/licensing.md`)
 
 ## راه‌اندازی سریع (Docker)
 
@@ -178,7 +180,8 @@ frontend/src/
 
 dev/mock-license-server/   License Server جعلی فقط برای توسعه محلی —
                            هرگز روی مشتری دیپلوی نشود؛ License Server واقعی
-                           محصول/ریپوی جداییست که بعداً ساخته می‌شود.
+                           محصول/ریپوی جداییه:
+                           https://github.com/farshadfighter/taktapluslicense
 
 docs/          مستندات معماری: قرارداد API لایسنسینگ، مدیریت کلید رمزنگاری،
                معماری بکاپ/ریستور، معماری مانیتورینگ SNMP، معماری توزیع
