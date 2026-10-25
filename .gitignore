@@ -1,0 +1,18 @@
+# Build output
+/bin/
+/web/node_modules/
+/web/dist/app/
+
+# Secrets: keys, passphrases and local env files must never be committed
+*.key
+*.passphrase
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+/web/*.tsbuildinfo
+/.data/

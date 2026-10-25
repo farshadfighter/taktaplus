@@ -39,7 +39,7 @@ TaktaPlus یک نرم‌افزار **On-Premise تحت وب** برای مدیر�
 
 | لایه | انتخاب |
 |---|---|
-| Backend | Go 1.23+، روتر `chi`، دسترسی به DB با `pgx` + `sqlc`، مهاجرت با `goose` |
+| Backend | Go 1.26+، روتر `chi`، دسترسی به DB با `pgx` + `sqlc`، مهاجرت با `goose` |
 | صف و زمان‌بندی | Redis + کتابخانه‌ی `asynq` (Job، Retry، Cron) |
 | دیتابیس اصلی | PostgreSQL 16 |
 | لاگ و گزارش | ClickHouse |
@@ -47,7 +47,7 @@ TaktaPlus یک نرم‌افزار **On-Premise تحت وب** برای مدیر�
 | RADIUS | `layeh.com/radius` |
 | TFTP / FTP | `pin/tftp` و `fclairamb/ftpserverlib` (داخل خود باینری) |
 | SMTP دروازه | `emersion/go-smtp` |
-| Frontend | React 18 + TypeScript + Vite + Ant Design (RTL) + ECharts + TanStack Query، تقویم شمسی |
+| Frontend | React 19 + TypeScript + Vite + Ant Design (RTL) + ECharts + TanStack Query، تقویم شمسی |
 | PDF گزارش | Chromium headless (رندر صفحه‌ی چاپی گزارش) |
 | استقرار | Docker Compose؛ ایمیج‌ها به صورت فایل `tar` در بسته‌ی نصب آفلاین |
 
@@ -306,7 +306,7 @@ FortiGate ──SMTP: to 0912xxxxxxx@sms.taktaplus──▶ TaktaPlus smtpgw ─
 ## ۱۳. License Guard (سمت برنامه)
 
 - فرمت فایل لایسنس و بررسی امضا از پکیج مشترک `github.com/farshadfighter/taktaplus-lic/pkg/licformat`.
-- **شناسه‌ی نصب:** هنگام نصب یک جفت‌کلید Ed25519 برای این نصب ساخته می‌شود؛ شناسه‌ی نصب = هش کلید عمومی + اثرانگشت سخت‌افزار (machine-id، UUID دیسک، MAC). تغییر جزئی سخت‌افزار (۱ از ۳) تحمل می‌شود.
+- **شناسه‌ی نصب:** هنگام نصب یک جفت‌کلید Ed25519 برای این نصب ساخته می‌شود؛ شناسه‌ی نصب = هش کلید عمومی. اثرانگشت سخت‌افزار (machine-id میزبان، UUID سخت‌افزار از DMI، MAC) جداگانه در درخواست فرستاده می‌شود و تغییر یکی از سه جزء تحمل می‌شود. در Docker، `/etc/machine-id` و `/sys/class/dmi/id` میزبان به صورت فقط‌خواندنی به کانتینر داده می‌شوند.
 - **فعال‌سازی آنلاین:** ارسال درخواست امضاشده با کلید نصب به سرور لایسنس، دریافت فایل لایسنس.
 - **فعال‌سازی آفلاین:** دانلود فایل درخواست (`.tpreq`) از پنل ← آپلود در پورتال ← دریافت فایل لایسنس (`.tplic`) ← آپلود در پنل.
 - **Heartbeat** (در صورت اتصال، روزانه): دریافت لایسنس به‌روز، اعمال ابطال، گزارش تعداد مصرف.

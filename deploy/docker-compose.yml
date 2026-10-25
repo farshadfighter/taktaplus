@@ -1,0 +1,69 @@
+# Local development / single-host deployment.
+#   make db-up                                                 # backing services only, for `make run`
+#   docker compose -f deploy/docker-compose.yml up -d --build  # everything
+name: taktaplus
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: taktaplus
+      POSTGRES_PASSWORD: ${TAKTAPLUS_DB_PASSWORD:-taktaplus}
+      POSTGRES_DB: taktaplus
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taktaplus"]
+      interval: 5s
+      retries: 10
+
+  # Job queue (phase 1+).
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+
+  # Logs and metrics (phase 4).
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    environment:
+      CLICKHOUSE_USER: taktaplus
+      CLICKHOUSE_PASSWORD: ${TAKTAPLUS_CH_PASSWORD:-taktaplus}
+      CLICKHOUSE_DB: taktaplus
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - chdata:/var/lib/clickhouse
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+
+  api:
+    build: ..
+    command: ["api"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TAKTAPLUS_LISTEN: ":8080"
+      TAKTAPLUS_DATABASE_URL: postgres://taktaplus:${TAKTAPLUS_DB_PASSWORD:-taktaplus}@postgres:5432/taktaplus?sslmode=disable
+      TAKTAPLUS_DATA_DIR: /var/lib/taktaplus
+      TAKTAPLUS_HOST_ROOT: /host
+    ports:
+      - "8080:8080"
+    volumes:
+      - data:/var/lib/taktaplus
+      # Host identifiers for the license fingerprint (read-only).
+      - /etc/machine-id:/host/etc/machine-id:ro
+      - /sys/class/dmi/id:/host/sys/class/dmi/id:ro
+
+volumes:
+  pgdata:
+  redisdata:
+  chdata:
+  data:
