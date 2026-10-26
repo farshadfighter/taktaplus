@@ -198,9 +198,18 @@ type DiscoverResult struct {
 	Peers      []Peer           `json:"ha_peers"`
 }
 
-// Discover connects to a device that is not saved yet: it fetches the TLS
+// Discover connects to a device before it is saved: it fetches the TLS
 // certificate and SSH host key for pinning (unless given) and probes it.
-func (s *Service) Discover(ctx context.Context, in Input) (*DiscoverResult, error) {
+// With existingID, secrets left empty are taken from that saved device.
+func (s *Service) Discover(ctx context.Context, existingID int64, in Input) (*DiscoverResult, error) {
+	if existingID != 0 {
+		cur, err := s.Get(ctx, existingID)
+		if err != nil {
+			return nil, err
+		}
+		merged := mergeCredentials(cur.creds, in.Credentials)
+		in.Credentials = &merged
+	}
 	if err := in.normalize(true); err != nil {
 		return nil, err
 	}
@@ -299,23 +308,7 @@ func (s *Service) Update(ctx context.Context, id int64, in Input) error {
 	if err != nil {
 		return err
 	}
-	creds := cur.creds
-	if in.Credentials != nil {
-		// Empty secret fields keep the stored values, so the form need not
-		// resend them.
-		n := *in.Credentials
-		keep := func(v *string, old string) {
-			if *v == "" {
-				*v = old
-			}
-		}
-		keep(&n.APIToken, creds.APIToken)
-		keep(&n.APIPass, creds.APIPass)
-		keep(&n.SSHPassword, creds.SSHPassword)
-		keep(&n.SSHKey, creds.SSHKey)
-		creds = n
-	}
-	sealed, err := s.seal(creds)
+	sealed, err := s.seal(mergeCredentials(cur.creds, in.Credentials))
 	if err != nil {
 		return err
 	}
@@ -331,6 +324,26 @@ func (s *Service) Update(ctx context.Context, id int64, in Input) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// mergeCredentials applies an update: nil keeps the stored credentials, and
+// empty secret fields keep the stored secrets, so forms need not resend
+// them. User names are taken as sent.
+func mergeCredentials(old Credentials, upd *Credentials) Credentials {
+	if upd == nil {
+		return old
+	}
+	n := *upd
+	keep := func(v *string, prev string) {
+		if *v == "" {
+			*v = prev
+		}
+	}
+	keep(&n.APIToken, old.APIToken)
+	keep(&n.APIPass, old.APIPass)
+	keep(&n.SSHPassword, old.SSHPassword)
+	keep(&n.SSHKey, old.SSHKey)
+	return n
 }
 
 // Delete removes a device and its status, metrics and alerts.

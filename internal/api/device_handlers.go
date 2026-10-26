@@ -77,7 +77,11 @@ func (s *srv) discoverDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
-	res, err := s.inv.Discover(ctx, in)
+	var existing int64
+	if p := optionalID(r, "id"); p != nil {
+		existing = *p
+	}
+	res, err := s.inv.Discover(ctx, existing, in)
 	if err != nil {
 		s.deviceError(w, r, err)
 		return
