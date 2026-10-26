@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/farshadfighter/taktaplus/internal/secretbox"
@@ -23,6 +24,11 @@ type Config struct {
 	LicenseServer   string         // TAKTAPLUS_LICENSE_SERVER: license server base URL for online activation
 	ShutdownTimeout time.Duration  // TAKTAPLUS_SHUTDOWN_TIMEOUT, default 15s
 	LogLevel        string         // TAKTAPLUS_LOG_LEVEL: debug, info, warn, error
+	TFTPListen      string         // TAKTAPLUS_TFTP_LISTEN, default ":6969" (publish as UDP 69); "off" disables
+	FTPListen       string         // TAKTAPLUS_FTP_LISTEN, default ":2121" (publish as TCP 21); "off" disables
+	FilePublicIP    string         // TAKTAPLUS_FILESERVER_IP: address devices use to reach TaktaPlus
+	FTPPassive      string         // TAKTAPLUS_FTP_PASSIVE_PORTS, default "30000-30009"
+	FTPPublicPort   int            // TAKTAPLUS_FTP_PUBLIC_PORT: FTP port as devices see it; default the listen port
 }
 
 // FromEnv reads the configuration from the process environment.
@@ -38,6 +44,23 @@ func FromEnv() (Config, error) {
 		LicenseServer:   os.Getenv("TAKTAPLUS_LICENSE_SERVER"),
 		ShutdownTimeout: 15 * time.Second,
 		LogLevel:        getenv("TAKTAPLUS_LOG_LEVEL", "info"),
+		TFTPListen:      getenv("TAKTAPLUS_TFTP_LISTEN", ":6969"),
+		FTPListen:       getenv("TAKTAPLUS_FTP_LISTEN", ":2121"),
+		FilePublicIP:    os.Getenv("TAKTAPLUS_FILESERVER_IP"),
+		FTPPassive:      getenv("TAKTAPLUS_FTP_PASSIVE_PORTS", "30000-30009"),
+	}
+	if v := os.Getenv("TAKTAPLUS_FTP_PUBLIC_PORT"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil || p < 1 || p > 65535 {
+			return c, errors.New("config: TAKTAPLUS_FTP_PUBLIC_PORT must be a port number")
+		}
+		c.FTPPublicPort = p
+	}
+	if c.TFTPListen == "off" {
+		c.TFTPListen = ""
+	}
+	if c.FTPListen == "off" {
+		c.FTPListen = ""
 	}
 	if c.TLS != "on" && c.TLS != "off" {
 		return c, errors.New("config: TAKTAPLUS_TLS must be on or off")

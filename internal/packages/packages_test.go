@@ -26,6 +26,7 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/pkg/manifest"
 	"github.com/farshadfighter/taktaplus-lic/pkg/repoauth"
 
+	"github.com/farshadfighter/taktaplus/internal/fileserver"
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/license/licensetest"
 	"github.com/farshadfighter/taktaplus/internal/secretbox"
@@ -280,3 +281,41 @@ func TestTFTPSourceAndUpload(t *testing.T) {
 		t.Fatalf("deleted file = %v", err)
 	}
 }
+
+func TestFTPSource(t *testing.T) {
+	ctx := context.Background()
+	files := map[string]string{"f1": "IPS VIA FTP"}
+	reg := fileserver.NewRegistry()
+	srv := fileserver.NewFTP(reg, func(sha string) (io.ReadSeekCloser, int64, error) {
+		c := files[sha]
+		return nopRSC{strings.NewReader(c)}, int64(len(c)), nil
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)), "", 0, 0)
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	go func() { _ = srv.ServeListener(ln) }()
+	defer srv.Close()
+	g := reg.Grant(map[string]string{"ips-db-28.00960.pkg": "f1"}, []string{"127.0.0.1"}, time.Minute)
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	s := newService(t, keys.Keyring{}, nil)
+	id, err := s.SaveSource(ctx, Source{Name: "FTP", Kind: KindFTP, Enabled: true,
+		Config: SourceConfig{Host: "127.0.0.1", Port: port, User: g.User, Password: g.Password, Dir: "/"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.Sync(ctx, id, "t")
+	if err != nil || run.Status != "ok" || run.Added != 1 {
+		t.Fatalf("ftp sync = %+v %v", run, err)
+	}
+	list, _ := s.List(ctx, Filter{})
+	if len(list) != 1 || list[0].Version != "28.00960" {
+		t.Fatalf("ftp package = %+v", list)
+	}
+	srcs, _ := s.ListSources(ctx)
+	if srcs[0].Config.Password != "********" {
+		t.Fatal("password not redacted")
+	}
+}
+
+type nopRSC struct{ *strings.Reader }
+
+func (nopRSC) Close() error { return nil }

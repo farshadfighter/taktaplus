@@ -29,6 +29,10 @@
 | `TAKTAPLUS_TLS` | `on` (پیش‌فرض) یا `off` فقط برای توسعه |
 | `TAKTAPLUS_TLS_CERT`, `TAKTAPLUS_TLS_KEY` | گواهی و کلید PEM سازمان؛ اگر خالی باشد گواهی خودامضا در `DATA_DIR/tls` ساخته می‌شود |
 
+| `TAKTAPLUS_FILESERVER_IP` | آدرسی که دستگاه‌ها با آن به TaktaPlus می‌رسند (برای دریافت پکیج و فرم‌ور با TFTP/FTP) |
+| `TAKTAPLUS_TFTP_LISTEN`, `TAKTAPLUS_FTP_LISTEN` | پیش‌فرض `:6969` و `:2121` (در Compose روی 69/udp و 21 منتشر می‌شوند)؛ `off` برای غیرفعال کردن |
+| `TAKTAPLUS_FTP_PASSIVE_PORTS`, `TAKTAPLUS_FTP_PUBLIC_PORT` | بازه‌ی پورت Passive (پیش‌فرض `30000-30009`) و پورت FTP از دید دستگاه |
+
 ساخت اولین مدیر: `TAKTAPLUS_ADMIN_PASSWORD=... taktaplus create-admin -username admin`
 
 ### دسترسی روی دستگاه

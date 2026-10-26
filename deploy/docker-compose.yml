@@ -60,8 +60,14 @@ services:
       TAKTAPLUS_MASTER_KEY: ${TAKTAPLUS_MASTER_KEY:?set TAKTAPLUS_MASTER_KEY}
       TAKTAPLUS_COOKIE_SECURE: ${TAKTAPLUS_COOKIE_SECURE:-true}
       TAKTAPLUS_LICENSE_SERVER: ${TAKTAPLUS_LICENSE_SERVER:-}
+      # Built-in file server that devices pull packages and firmware from.
+      TAKTAPLUS_FILESERVER_IP: ${TAKTAPLUS_FILESERVER_IP:?set TAKTAPLUS_FILESERVER_IP to the address devices use to reach this server}
+      TAKTAPLUS_FTP_PUBLIC_PORT: "21"
     ports:
       - "443:8443"
+      - "69:6969/udp"
+      - "21:2121"
+      - "30000-30009:30000-30009"
     volumes:
       - data:/var/lib/taktaplus
       # Host identifiers for the license fingerprint (read-only).

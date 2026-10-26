@@ -25,6 +25,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/backup"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus/internal/config"
+	"github.com/farshadfighter/taktaplus/internal/fileserver"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
@@ -161,6 +162,10 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 	pkgs := packages.New(pool, cfg.MasterKey, filepath.Join(cfg.DataDir, "repo"), pkgRing, lic)
 	go pkgs.Scheduler(ctx, log.With("component", "packages").Warn)
+	files := fileserver.New(fileserver.Config{TFTPAddr: cfg.TFTPListen, FTPAddr: cfg.FTPListen, PublicIP: cfg.FilePublicIP,
+		PassiveRange: cfg.FTPPassive, FTPPublic: cfg.FTPPublicPort}, pkgs.OpenFile, log.With("component", "fileserver"))
+	files.Start()
+	defer files.Stop()
 	tmpDir := filepath.Join(cfg.DataDir, "tmp")
 	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
 		return err

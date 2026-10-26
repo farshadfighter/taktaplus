@@ -171,6 +171,20 @@ func (s *Service) Open(sha string) (*os.File, error) {
 	return f, err
 }
 
+// OpenFile opens a stored file with its size, for the file server.
+func (s *Service) OpenFile(sha string) (io.ReadSeekCloser, int64, error) {
+	f, err := s.Open(sha)
+	if err != nil {
+		return nil, 0, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, 0, err
+	}
+	return f, fi.Size(), nil
+}
+
 // store copies r into the repository and returns its hash and size. When
 // wantSHA is set the content must match it.
 func (s *Service) store(r io.Reader, wantSHA string) (string, int64, error) {
