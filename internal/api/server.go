@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
+	"github.com/farshadfighter/taktaplus/internal/packages"
 )
 
 // Deps are the server's collaborators.
@@ -35,6 +37,8 @@ type Deps struct {
 	Alerts       *alerts.Service
 	Monitor      *monitor.Monitor
 	Backups      *backup.Service
+	Packages     *packages.Service
+	TmpDir       string // for large uploads; default os.TempDir()
 }
 
 type srv struct {
@@ -47,15 +51,20 @@ type srv struct {
 	alerts       *alerts.Service
 	mon          *monitor.Monitor
 	backups      *backup.Service
+	pkgs         *packages.Service
+	tmpDir       string
 }
 
 // New returns the root HTTP handler.
 func New(d Deps) http.Handler {
 	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.License, cookieSecure: d.CookieSecure,
-		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups}
+		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups, pkgs: d.Packages, tmpDir: d.TmpDir}
+	if s.tmpDir == "" {
+		s.tmpDir = os.TempDir()
+	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(120*time.Second), securityHeaders)
+	r.Use(middleware.RequestID, middleware.Recoverer, securityHeaders)
 
 	r.Get("/healthz", func(w http.ResponseWriter, req *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
@@ -75,8 +84,16 @@ func New(d Deps) http.Handler {
 			})
 		})
 
+		// Large uploads: no request timeout.
 		r.Group(func(r chi.Router) {
 			r.Use(csrfGuard, s.loadSession)
+			pm := requirePerm(auth.PermPackages)
+			r.With(pm).Post("/packages/upload", s.uploadPackage)
+			r.With(pm).Post("/packages/bundle", s.importBundle)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(120*time.Second), csrfGuard, s.loadSession)
 			r.Post("/auth/login", s.handleLogin)
 			r.Post("/auth/mfa", s.handleMFA)
 			r.Post("/auth/mfa/setup", s.handleMFASetup)
@@ -144,6 +161,16 @@ func New(d Deps) http.Handler {
 			r.With(badmin).Post("/backup-policies", s.savePolicy)
 			r.With(badmin).Put("/backup-policies/{id}", s.savePolicy)
 			r.With(badmin).Delete("/backup-policies/{id}", s.deletePolicy)
+
+			pm := requirePerm(auth.PermPackages)
+			r.With(read).Get("/packages", s.listPackages)
+			r.With(pm).Put("/packages/{id}", s.updatePackage)
+			r.With(pm).Delete("/packages/{id}", s.deletePackage)
+			r.With(read).Get("/package-sources", s.listSources)
+			r.With(pm).Post("/package-sources", s.saveSource)
+			r.With(pm).Put("/package-sources/{id}", s.saveSource)
+			r.With(pm).Delete("/package-sources/{id}", s.deleteSource)
+			r.With(pm).Post("/package-sources/{id}/sync", s.syncSource)
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

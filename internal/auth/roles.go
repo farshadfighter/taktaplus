@@ -21,6 +21,7 @@ const (
 	PermBackupsAdmin  Perm = "backups.admin" // policies, deletion
 	PermRestore       Perm = "backups.restore"
 	PermAlertsManage  Perm = "alerts.manage"
+	PermPackages      Perm = "packages.manage" // sources, uploads, repository
 	PermChangeApprove Perm = "changes.approve"
 	PermLicenseRead   Perm = "license.read"
 	PermLicenseManage Perm = "license.manage"
@@ -32,11 +33,11 @@ const (
 var rolePerms = map[Role][]Perm{
 	RoleSuperAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
-		PermChangeApprove, PermLicenseRead, PermLicenseManage, PermUsersManage, PermAuditRead, PermSettings,
+		PermChangeApprove, PermLicenseRead, PermLicenseManage, PermUsersManage, PermAuditRead, PermSettings, PermPackages,
 	},
 	RoleAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
-		PermChangeApprove, PermLicenseRead, PermAuditRead,
+		PermChangeApprove, PermLicenseRead, PermAuditRead, PermPackages,
 	},
 	RoleApprover: {PermDevicesRead, PermChangeApprove, PermLicenseRead, PermAuditRead},
 	RoleOperator: {PermDevicesRead, PermBackupsRun, PermLicenseRead},

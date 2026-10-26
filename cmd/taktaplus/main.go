@@ -28,6 +28,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
+	"github.com/farshadfighter/taktaplus/internal/packages"
 	"github.com/farshadfighter/taktaplus/internal/store"
 	"github.com/farshadfighter/taktaplus/internal/tlscert"
 	"github.com/farshadfighter/taktaplus/web"
@@ -151,12 +152,25 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		return err
 	}
 	go backups.Scheduler(ctx)
+	pkgRing, err := packages.TrustedKeys()
+	if err != nil {
+		return err
+	}
+	if len(pkgRing) == 0 {
+		log.Warn("no trusted package keys are built in; signed manifests cannot be verified")
+	}
+	pkgs := packages.New(pool, cfg.MasterKey, filepath.Join(cfg.DataDir, "repo"), pkgRing, lic)
+	go pkgs.Scheduler(ctx, log.With("component", "packages").Warn)
+	tmpDir := filepath.Join(cfg.DataDir, "tmp")
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr: cfg.Listen,
 		Handler: api.New(api.Deps{
 			Log: log, DB: pool, Auth: authSvc, License: lic, UI: web.App(), CookieSecure: cfg.CookieSecure,
-			Inventory: inv, Alerts: alertSvc, Monitor: mon, Backups: backups,
+			Inventory: inv, Alerts: alertSvc, Monitor: mon, Backups: backups, Packages: pkgs, TmpDir: tmpDir,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

@@ -256,5 +256,17 @@ func (m *Manager) State(ctx context.Context) (State, error) {
 	return s, err
 }
 
+// ServerURL returns the license server base URL: the configured one, or the
+// one the installed license names for heartbeats.
+func (m *Manager) ServerURL() string {
+	if m.serverURL != "" {
+		return m.serverURL
+	}
+	if lic, err := m.guard.License(); err == nil && lic.Online != nil {
+		return strings.TrimSuffix(strings.TrimRight(lic.Online.HeartbeatURL, "/"), "/api/v1/heartbeat")
+	}
+	return ""
+}
+
 // OnlineConfigured reports whether online activation is possible.
 func (m *Manager) OnlineConfigured() bool { return m.serverURL != "" }
