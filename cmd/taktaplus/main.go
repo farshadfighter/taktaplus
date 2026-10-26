@@ -3,18 +3,22 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
 
 	"github.com/farshadfighter/taktaplus/internal/api"
+	"github.com/farshadfighter/taktaplus/internal/auth"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus/internal/config"
 	"github.com/farshadfighter/taktaplus/internal/license"
@@ -28,17 +32,18 @@ type service struct {
 	run     func(ctx context.Context, cfg config.Config, log *slog.Logger) error
 }
 
-var order = []string{"api", "migrate", "worker", "fileserver", "radius", "smtpgw", "collector", "version"}
+var order = []string{"api", "migrate", "create-admin", "worker", "fileserver", "radius", "smtpgw", "collector", "version"}
 
 var services = map[string]service{
-	"api":        {summary: "web UI and REST API", run: runAPI},
-	"migrate":    {summary: "apply database migrations and exit", run: runMigrate},
-	"worker":     {summary: "background jobs and schedules", phase: 1},
-	"fileserver": {summary: "built-in TFTP/FTP server", phase: 2},
-	"radius":     {summary: "RADIUS server for SMS two-factor", phase: 3},
-	"smtpgw":     {summary: "email-to-SMS gateway", phase: 3},
-	"collector":  {summary: "syslog collector", phase: 4},
-	"version":    {summary: "print the version"},
+	"api":          {summary: "web UI and REST API", run: runAPI},
+	"migrate":      {summary: "apply database migrations and exit", run: runMigrate},
+	"create-admin": {summary: "create a superadmin: create-admin -username U [-name N]", run: runCreateAdmin},
+	"worker":       {summary: "background jobs and schedules", phase: 1},
+	"fileserver":   {summary: "built-in TFTP/FTP server", phase: 2},
+	"radius":       {summary: "RADIUS server for SMS two-factor", phase: 3},
+	"smtpgw":       {summary: "email-to-SMS gateway", phase: 3},
+	"collector":    {summary: "syslog collector", phase: 4},
+	"version":      {summary: "print the version"},
 }
 
 func usage() {
@@ -123,9 +128,18 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		return err
 	}
 
+	authSvc := auth.NewService(pool, cfg.MasterKey)
+	lic := license.NewManager(license.NewGuard(ring, identity), pool, log, cfg.LicenseServer, cfg.HostRoot, nil)
+	if err := lic.Load(ctx); err != nil {
+		return err
+	}
+	go lic.Run(ctx)
+
 	srv := &http.Server{
-		Addr:              cfg.Listen,
-		Handler:           api.New(log, pool, web.App()),
+		Addr: cfg.Listen,
+		Handler: api.New(api.Deps{
+			Log: log, DB: pool, Auth: authSvc, License: lic, UI: web.App(), CookieSecure: cfg.CookieSecure,
+		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errCh := make(chan error, 1)
@@ -145,5 +159,42 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
 	}
+	return nil
+}
+
+// runCreateAdmin creates a superadmin. The password comes from
+// $TAKTAPLUS_ADMIN_PASSWORD or the first line of stdin.
+func runCreateAdmin(ctx context.Context, cfg config.Config, log *slog.Logger) error {
+	fs := flag.NewFlagSet("create-admin", flag.ContinueOnError)
+	username := fs.String("username", "", "login name (required)")
+	name := fs.String("name", "Administrator", "display name")
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		return err
+	}
+	if *username == "" {
+		return errors.New("-username is required")
+	}
+	password := os.Getenv("TAKTAPLUS_ADMIN_PASSWORD")
+	if password == "" {
+		fmt.Fprint(os.Stderr, "password: ")
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil && line == "" {
+			return err
+		}
+		password = strings.TrimRight(line, "\r\n")
+	}
+	pool, err := store.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := store.Migrate(ctx, pool, log); err != nil {
+		return err
+	}
+	u, err := auth.NewService(pool, cfg.MasterKey).CreateUser(ctx, *username, *name, "", auth.RoleSuperAdmin, password)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("created superadmin %s (id %d); set up two-factor authentication at first login\n", u.Username, u.ID)
 	return nil
 }

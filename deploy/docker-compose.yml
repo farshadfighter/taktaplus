@@ -54,6 +54,9 @@ services:
       TAKTAPLUS_DATABASE_URL: postgres://taktaplus:${TAKTAPLUS_DB_PASSWORD:-taktaplus}@postgres:5432/taktaplus?sslmode=disable
       TAKTAPLUS_DATA_DIR: /var/lib/taktaplus
       TAKTAPLUS_HOST_ROOT: /host
+      TAKTAPLUS_MASTER_KEY: ${TAKTAPLUS_MASTER_KEY:?set TAKTAPLUS_MASTER_KEY}
+      TAKTAPLUS_COOKIE_SECURE: ${TAKTAPLUS_COOKIE_SECURE:-true}
+      TAKTAPLUS_LICENSE_SERVER: ${TAKTAPLUS_LICENSE_SERVER:-}
     ports:
       - "8080:8080"
     volumes:

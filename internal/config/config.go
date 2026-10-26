@@ -5,16 +5,21 @@ import (
 	"errors"
 	"os"
 	"time"
+
+	"github.com/farshadfighter/taktaplus/internal/secretbox"
 )
 
 // Config holds runtime settings.
 type Config struct {
-	Listen          string        // TAKTAPLUS_LISTEN, default ":8080" (TLS arrives in phase 1)
-	DatabaseURL     string        // TAKTAPLUS_DATABASE_URL, required
-	DataDir         string        // TAKTAPLUS_DATA_DIR, default /var/lib/taktaplus
-	HostRoot        string        // TAKTAPLUS_HOST_ROOT: where host identifiers are mounted, default "/"
-	ShutdownTimeout time.Duration // TAKTAPLUS_SHUTDOWN_TIMEOUT, default 15s
-	LogLevel        string        // TAKTAPLUS_LOG_LEVEL: debug, info, warn, error
+	Listen          string         // TAKTAPLUS_LISTEN, default ":8080" (TLS arrives in phase 1)
+	DatabaseURL     string         // TAKTAPLUS_DATABASE_URL, required
+	DataDir         string         // TAKTAPLUS_DATA_DIR, default /var/lib/taktaplus
+	HostRoot        string         // TAKTAPLUS_HOST_ROOT: where host identifiers are mounted, default "/"
+	MasterKey       *secretbox.Box // TAKTAPLUS_MASTER_KEY: base64 of 32 random bytes, required
+	CookieSecure    bool           // TAKTAPLUS_COOKIE_SECURE, default true; false only for local HTTP
+	LicenseServer   string         // TAKTAPLUS_LICENSE_SERVER: license server base URL for online activation
+	ShutdownTimeout time.Duration  // TAKTAPLUS_SHUTDOWN_TIMEOUT, default 15s
+	LogLevel        string         // TAKTAPLUS_LOG_LEVEL: debug, info, warn, error
 }
 
 // FromEnv reads the configuration from the process environment.
@@ -24,6 +29,8 @@ func FromEnv() (Config, error) {
 		DatabaseURL:     os.Getenv("TAKTAPLUS_DATABASE_URL"),
 		DataDir:         getenv("TAKTAPLUS_DATA_DIR", "/var/lib/taktaplus"),
 		HostRoot:        getenv("TAKTAPLUS_HOST_ROOT", "/"),
+		CookieSecure:    os.Getenv("TAKTAPLUS_COOKIE_SECURE") != "false",
+		LicenseServer:   os.Getenv("TAKTAPLUS_LICENSE_SERVER"),
 		ShutdownTimeout: 15 * time.Second,
 		LogLevel:        getenv("TAKTAPLUS_LOG_LEVEL", "info"),
 	}
@@ -37,6 +44,15 @@ func FromEnv() (Config, error) {
 	if c.DatabaseURL == "" {
 		return c, errors.New("config: TAKTAPLUS_DATABASE_URL is required")
 	}
+	key := os.Getenv("TAKTAPLUS_MASTER_KEY")
+	if key == "" {
+		return c, errors.New("config: TAKTAPLUS_MASTER_KEY is required (generate with: head -c32 /dev/urandom | base64)")
+	}
+	box, err := secretbox.FromBase64(key)
+	if err != nil {
+		return c, errors.New("config: TAKTAPLUS_MASTER_KEY must be base64 of 32 bytes")
+	}
+	c.MasterKey = box
 	return c, nil
 }
 

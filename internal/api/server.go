@@ -3,7 +3,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"log/slog"
@@ -13,25 +12,46 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/farshadfighter/taktaplus/internal/auth"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
+	"github.com/farshadfighter/taktaplus/internal/license"
 )
 
-// Pinger reports whether a dependency is reachable.
-type Pinger interface {
-	Ping(ctx context.Context) error
+// Deps are the server's collaborators.
+type Deps struct {
+	Log          *slog.Logger
+	DB           *pgxpool.Pool
+	Auth         *auth.Service
+	License      *license.Manager
+	UI           fs.FS
+	CookieSecure bool
+	// Mount adds feature routes (devices, backups, …) inside the signed-in
+	// API group.
+	Mount []func(r chi.Router)
+}
+
+type srv struct {
+	log          *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Service
+	lic          *license.Manager
+	cookieSecure bool
 }
 
 // New returns the root HTTP handler.
-func New(log *slog.Logger, db Pinger, ui fs.FS) http.Handler {
+func New(d Deps) http.Handler {
+	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.License, cookieSecure: d.CookieSecure}
+
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, middleware.Timeout(60*time.Second))
+	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(120*time.Second), securityHeaders)
 
 	r.Get("/healthz", func(w http.ResponseWriter, req *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
 		defer cancel()
-		if err := db.Ping(ctx); err != nil {
-			log.Warn("health check failed", "err", err)
+		if err := d.DB.Ping(ctx); err != nil {
+			d.Log.Warn("health check failed", "err", err)
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable", "database": "down"})
 			return
 		}
@@ -44,13 +64,57 @@ func New(log *slog.Logger, db Pinger, ui fs.FS) http.Handler {
 				"version": buildinfo.Version, "commit": buildinfo.Commit, "date": buildinfo.Date,
 			})
 		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(csrfGuard, s.loadSession)
+			r.Post("/auth/login", s.handleLogin)
+			r.Post("/auth/mfa", s.handleMFA)
+			r.Post("/auth/mfa/setup", s.handleMFASetup)
+			r.Post("/auth/mfa/enable", s.handleMFAEnable)
+			r.Post("/auth/logout", s.handleLogout)
+			r.With(requireUser).Get("/me", s.handleMe)
+			r.With(requirePerm(auth.PermAuditRead)).Get("/audit", s.handleAuditList)
+
+			users := requirePerm(auth.PermUsersManage)
+			r.With(users).Get("/users", s.listUsers)
+			r.With(users).Post("/users", s.createUser)
+			r.With(users).Put("/users/{id}", s.updateUser)
+			r.With(users).Post("/users/{id}/password", s.setPassword)
+			r.With(users).Post("/users/{id}/reset-mfa", s.resetMFA)
+			r.With(users).Post("/users/{id}/unlock", s.unlockUser)
+
+			r.With(requirePerm(auth.PermLicenseRead)).Get("/license", s.getLicense)
+			lm := requirePerm(auth.PermLicenseManage)
+			r.With(lm).Post("/license/activate", s.activateLicense)
+			r.With(lm).Post("/license/request", s.licenseRequest)
+			r.With(lm).Post("/license/upload", s.uploadLicense)
+			r.With(lm).Post("/license/heartbeat", s.licenseHeartbeat)
+
+			for _, mount := range d.Mount {
+				r.Group(mount)
+			}
+		})
+
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			writeError(w, http.StatusNotFound, "not found")
 		})
 	})
 
-	r.Handle("/*", spaHandler(ui))
+	r.Handle("/*", spaHandler(d.UI))
 	return r
+}
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "same-origin")
+		if !isAPI(r.URL.Path) {
+			h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // spaHandler serves static files and falls back to index.html so client-side
@@ -77,10 +141,4 @@ func spaHandler(ui fs.FS) http.Handler {
 		w.Header().Set("Cache-Control", "no-cache")
 		_, _ = w.Write(index)
 	})
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }
