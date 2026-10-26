@@ -25,6 +25,6 @@ COPY --from=build /out/ /usr/local/bin/
 # Owned by the distroless "nonroot" user so a fresh named volume is writable.
 COPY --from=build --chown=65532:65532 /data-skel /var/lib/taktaplus
 VOLUME /var/lib/taktaplus
-EXPOSE 8080
+EXPOSE 8443
 ENTRYPOINT ["/usr/local/bin/taktaplus"]
 CMD ["api"]

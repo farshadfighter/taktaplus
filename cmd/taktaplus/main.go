@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
 	"github.com/farshadfighter/taktaplus/internal/store"
+	"github.com/farshadfighter/taktaplus/internal/tlscert"
 	"github.com/farshadfighter/taktaplus/web"
 )
 
@@ -158,10 +160,26 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	if cfg.TLS == "on" {
+		var cert tls.Certificate
+		if cfg.TLSCert != "" {
+			cert, err = tlscert.Load(cfg.TLSCert, cfg.TLSKey)
+		} else {
+			cert, err = tlscert.SelfSigned(filepath.Join(cfg.DataDir, "tls"))
+		}
+		if err != nil {
+			return fmt.Errorf("TLS certificate: %w", err)
+		}
+		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+	}
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("listening", "addr", cfg.Listen, "version", buildinfo.Version)
-		errCh <- srv.ListenAndServe()
+		log.Info("listening", "addr", cfg.Listen, "tls", cfg.TLS, "version", buildinfo.Version)
+		if srv.TLSConfig != nil {
+			errCh <- srv.ListenAndServeTLS("", "")
+		} else {
+			errCh <- srv.ListenAndServe()
+		}
 	}()
 
 	select {

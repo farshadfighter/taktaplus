@@ -11,7 +11,10 @@ import (
 
 // Config holds runtime settings.
 type Config struct {
-	Listen          string         // TAKTAPLUS_LISTEN, default ":8080" (TLS arrives in phase 1)
+	Listen          string // TAKTAPLUS_LISTEN, default ":8443" (":8080" with TLS off)
+	TLS             string // TAKTAPLUS_TLS: "on" (default) or "off" for local development behind a proxy
+	TLSCert         string // TAKTAPLUS_TLS_CERT and TAKTAPLUS_TLS_KEY: PEM files; empty = self-signed in DATA_DIR/tls
+	TLSKey          string
 	DatabaseURL     string         // TAKTAPLUS_DATABASE_URL, required
 	DataDir         string         // TAKTAPLUS_DATA_DIR, default /var/lib/taktaplus
 	HostRoot        string         // TAKTAPLUS_HOST_ROOT: where host identifiers are mounted, default "/"
@@ -25,7 +28,9 @@ type Config struct {
 // FromEnv reads the configuration from the process environment.
 func FromEnv() (Config, error) {
 	c := Config{
-		Listen:          getenv("TAKTAPLUS_LISTEN", ":8080"),
+		TLS:             getenv("TAKTAPLUS_TLS", "on"),
+		TLSCert:         os.Getenv("TAKTAPLUS_TLS_CERT"),
+		TLSKey:          os.Getenv("TAKTAPLUS_TLS_KEY"),
 		DatabaseURL:     os.Getenv("TAKTAPLUS_DATABASE_URL"),
 		DataDir:         getenv("TAKTAPLUS_DATA_DIR", "/var/lib/taktaplus"),
 		HostRoot:        getenv("TAKTAPLUS_HOST_ROOT", "/"),
@@ -34,6 +39,13 @@ func FromEnv() (Config, error) {
 		ShutdownTimeout: 15 * time.Second,
 		LogLevel:        getenv("TAKTAPLUS_LOG_LEVEL", "info"),
 	}
+	if c.TLS != "on" && c.TLS != "off" {
+		return c, errors.New("config: TAKTAPLUS_TLS must be on or off")
+	}
+	if (c.TLSCert == "") != (c.TLSKey == "") {
+		return c, errors.New("config: set both TAKTAPLUS_TLS_CERT and TAKTAPLUS_TLS_KEY, or neither")
+	}
+	c.Listen = getenv("TAKTAPLUS_LISTEN", map[string]string{"on": ":8443", "off": ":8080"}[c.TLS])
 	if v := os.Getenv("TAKTAPLUS_SHUTDOWN_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {

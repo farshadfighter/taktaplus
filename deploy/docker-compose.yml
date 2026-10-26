@@ -50,7 +50,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      TAKTAPLUS_LISTEN: ":8080"
+      TAKTAPLUS_LISTEN: ":8443"
+      # HTTPS with a self-signed certificate in the data volume, or your own:
+      TAKTAPLUS_TLS_CERT: ${TAKTAPLUS_TLS_CERT:-}
+      TAKTAPLUS_TLS_KEY: ${TAKTAPLUS_TLS_KEY:-}
       TAKTAPLUS_DATABASE_URL: postgres://taktaplus:${TAKTAPLUS_DB_PASSWORD:-taktaplus}@postgres:5432/taktaplus?sslmode=disable
       TAKTAPLUS_DATA_DIR: /var/lib/taktaplus
       TAKTAPLUS_HOST_ROOT: /host
@@ -58,7 +61,7 @@ services:
       TAKTAPLUS_COOKIE_SECURE: ${TAKTAPLUS_COOKIE_SECURE:-true}
       TAKTAPLUS_LICENSE_SERVER: ${TAKTAPLUS_LICENSE_SERVER:-}
     ports:
-      - "8080:8080"
+      - "443:8443"
     volumes:
       - data:/var/lib/taktaplus
       # Host identifiers for the license fingerprint (read-only).
