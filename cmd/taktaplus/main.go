@@ -17,11 +17,14 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/farshadfighter/taktaplus/internal/alerts"
 	"github.com/farshadfighter/taktaplus/internal/api"
 	"github.com/farshadfighter/taktaplus/internal/auth"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus/internal/config"
+	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
+	"github.com/farshadfighter/taktaplus/internal/monitor"
 	"github.com/farshadfighter/taktaplus/internal/store"
 	"github.com/farshadfighter/taktaplus/web"
 )
@@ -129,16 +132,22 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 
 	authSvc := auth.NewService(pool, cfg.MasterKey)
-	lic := license.NewManager(license.NewGuard(ring, identity), pool, log, cfg.LicenseServer, cfg.HostRoot, nil)
+	guard := license.NewGuard(ring, identity)
+	inv := inventory.New(pool, cfg.MasterKey, guard)
+	lic := license.NewManager(guard, pool, log, cfg.LicenseServer, cfg.HostRoot, inv.Usage)
 	if err := lic.Load(ctx); err != nil {
 		return err
 	}
 	go lic.Run(ctx)
+	alertSvc := alerts.New(pool, cfg.MasterKey, inv, guard, log.With("component", "alerts"))
+	mon := monitor.New(inv, alertSvc, log.With("component", "monitor"), monitor.Options{})
+	go mon.Run(ctx)
 
 	srv := &http.Server{
 		Addr: cfg.Listen,
 		Handler: api.New(api.Deps{
 			Log: log, DB: pool, Auth: authSvc, License: lic, UI: web.App(), CookieSecure: cfg.CookieSecure,
+			Inventory: inv, Alerts: alertSvc, Monitor: mon,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

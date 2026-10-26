@@ -14,9 +14,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/farshadfighter/taktaplus/internal/alerts"
 	"github.com/farshadfighter/taktaplus/internal/auth"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
+	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
+	"github.com/farshadfighter/taktaplus/internal/monitor"
 )
 
 // Deps are the server's collaborators.
@@ -27,9 +30,9 @@ type Deps struct {
 	License      *license.Manager
 	UI           fs.FS
 	CookieSecure bool
-	// Mount adds feature routes (devices, backups, …) inside the signed-in
-	// API group.
-	Mount []func(r chi.Router)
+	Inventory    *inventory.Service
+	Alerts       *alerts.Service
+	Monitor      *monitor.Monitor
 }
 
 type srv struct {
@@ -38,11 +41,15 @@ type srv struct {
 	auth         *auth.Service
 	lic          *license.Manager
 	cookieSecure bool
+	inv          *inventory.Service
+	alerts       *alerts.Service
+	mon          *monitor.Monitor
 }
 
 // New returns the root HTTP handler.
 func New(d Deps) http.Handler {
-	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.License, cookieSecure: d.CookieSecure}
+	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.License, cookieSecure: d.CookieSecure,
+		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(120*time.Second), securityHeaders)
@@ -90,9 +97,33 @@ func New(d Deps) http.Handler {
 			r.With(lm).Post("/license/upload", s.uploadLicense)
 			r.With(lm).Post("/license/heartbeat", s.licenseHeartbeat)
 
-			for _, mount := range d.Mount {
-				r.Group(mount)
-			}
+			read := requirePerm(auth.PermDevicesRead)
+			write := requirePerm(auth.PermDevicesWrite)
+			r.With(read).Get("/devices", s.listDevices)
+			r.With(write).Post("/devices/discover", s.discoverDevice)
+			r.With(write).Post("/devices", s.createDevice)
+			r.With(read).Get("/devices/{id}", s.getDevice)
+			r.With(write).Put("/devices/{id}", s.updateDevice)
+			r.With(write).Delete("/devices/{id}", s.deleteDevice)
+			r.With(read).Post("/devices/{id}/refresh", s.refreshDevice)
+			r.With(read).Get("/devices/{id}/metrics", s.deviceMetrics)
+			r.With(read).Get("/groups", s.listGroups)
+			r.With(write).Post("/groups", s.saveGroup)
+			r.With(write).Put("/groups/{id}", s.saveGroup)
+			r.With(write).Delete("/groups/{id}", s.deleteGroup)
+
+			am := requirePerm(auth.PermAlertsManage)
+			r.With(read).Get("/alerts", s.listAlerts)
+			r.With(read).Post("/alerts/{id}/ack", s.ackAlert)
+			r.With(read).Get("/alert-rules", s.listRules)
+			r.With(am).Post("/alert-rules", s.saveRule)
+			r.With(am).Put("/alert-rules/{id}", s.saveRule)
+			r.With(am).Delete("/alert-rules/{id}", s.deleteRule)
+			r.With(am).Get("/channels", s.listChannels)
+			r.With(am).Post("/channels", s.saveChannel)
+			r.With(am).Put("/channels/{id}", s.saveChannel)
+			r.With(am).Delete("/channels/{id}", s.deleteChannel)
+			r.With(am).Post("/channels/{id}/test", s.testChannel)
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

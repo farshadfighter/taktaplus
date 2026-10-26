@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -23,8 +24,13 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/pkg/keys"
 	"github.com/farshadfighter/taktaplus-lic/pkg/licformat"
 
+	"github.com/farshadfighter/taktaplus/internal/alerts"
 	"github.com/farshadfighter/taktaplus/internal/auth"
+	"github.com/farshadfighter/taktaplus/internal/device"
+	"github.com/farshadfighter/taktaplus/internal/device/devicetest"
+	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
+	"github.com/farshadfighter/taktaplus/internal/monitor"
 	"github.com/farshadfighter/taktaplus/internal/secretbox"
 	"github.com/farshadfighter/taktaplus/internal/testdb"
 )
@@ -35,6 +41,7 @@ type harness struct {
 	auth   *auth.Service
 	ts     *httptest.Server
 	client *http.Client
+	fleet  devicetest.Fleet
 }
 
 // fakeLicenseServer signs a one-device license for any activation request.
@@ -93,16 +100,22 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	mgr := license.NewManager(license.NewGuard(keys.Keyring{"lic-test": pub}, id), db, log, licSrv.URL, t.TempDir(), nil)
+	guard := license.NewGuard(keys.Keyring{"lic-test": pub}, id)
+	inv := inventory.New(db, box, guard)
+	fleet := devicetest.Fleet{}
+	inv.SetDriverFactory(fleet.Factory())
+	mgr := license.NewManager(guard, db, log, licSrv.URL, t.TempDir(), inv.Usage)
 	if err := mgr.Load(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	al := alerts.New(db, box, inv, guard, log)
+	mon := monitor.New(inv, al, log, monitor.Options{})
 
 	ui := fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}
-	ts := httptest.NewServer(New(Deps{Log: log, DB: db, Auth: svc, License: mgr, UI: ui}))
+	ts := httptest.NewServer(New(Deps{Log: log, DB: db, Auth: svc, License: mgr, UI: ui, Inventory: inv, Alerts: al, Monitor: mon}))
 	t.Cleanup(ts.Close)
 	jar, _ := cookiejar.New(nil)
-	return &harness{t: t, db: db, auth: svc, ts: ts, client: &http.Client{Jar: jar}}
+	return &harness{t: t, db: db, auth: svc, ts: ts, client: &http.Client{Jar: jar}, fleet: fleet}
 }
 
 func (h *harness) do(method, path string, body any) (int, map[string]any) {
@@ -233,5 +246,92 @@ func TestLicenseActivationFlow(t *testing.T) {
 	}
 	if code, _ := h.do("POST", "/api/v1/license/upload", map[string]string{"license": "TPLIC1.bad.sig"}); code != http.StatusBadRequest {
 		t.Fatalf("bad upload = %d", code)
+	}
+}
+
+func TestDevices(t *testing.T) {
+	h := newHarness(t)
+	h.fleet["10.1.1.1"] = &devicetest.Fake{
+		Info:    device.Info{Serial: "FG100F0001", Model: "FG100F", Firmware: "7.4.4"},
+		HealthV: device.Health{CPU: 12, Mem: 40, Disk: -1},
+		Sigs:    []device.Signature{{Name: "ips_db", Version: "28.00948"}},
+	}
+	h.signIn("root", auth.RoleSuperAdmin)
+	if code, body := h.do("POST", "/api/v1/license/activate", map[string]string{"key": "TPK-GOOD"}); code != http.StatusOK {
+		t.Fatalf("activate = %d %v", code, body)
+	}
+
+	input := map[string]any{"name": "FG-HQ", "kind": "fortigate", "host": "10.1.1.1", "tls_pin": strings.Repeat("ab", 32),
+		"credentials": map[string]string{"api_token": "secret-token"}}
+	code, body := h.do("POST", "/api/v1/devices/discover", input)
+	if code != http.StatusOK || body["license"] != "active" || body["info"].(map[string]any)["serial"] != "FG100F0001" {
+		t.Fatalf("discover = %d %v", code, body)
+	}
+	code, body = h.do("POST", "/api/v1/devices", input)
+	if code != http.StatusCreated || body["serial"] != "FG100F0001" || body["status"] != "online" {
+		t.Fatalf("create = %d %v", code, body)
+	}
+	if strings.Contains(fmt.Sprint(body), "secret-token") {
+		t.Fatal("credentials leaked")
+	}
+	path := "/api/v1/devices/" + strconv.Itoa(int(body["id"].(float64)))
+
+	code, body = h.do("GET", path, nil)
+	st, _ := body["status"].(map[string]any)
+	if code != http.StatusOK || st == nil || st["cpu"] != 12.0 || len(st["signatures"].([]any)) != 1 {
+		t.Fatalf("get = %d %v", code, body)
+	}
+	code, body = h.do("GET", "/api/v1/devices", nil)
+	if code != http.StatusOK || len(body["items"].([]any)) != 1 {
+		t.Fatalf("list = %d %v", code, body)
+	}
+	if code, body := h.do("GET", path+"/metrics?hours=1", nil); code != http.StatusOK || len(body["items"].([]any)) != 1 {
+		t.Fatalf("metrics = %d %v", code, body)
+	}
+
+	// The device appears in license usage.
+	code, body = h.do("POST", "/api/v1/license/request", map[string]string{})
+	if code != http.StatusOK {
+		t.Fatalf("refresh request = %d %v", code, body)
+	}
+
+	// Unreachable device: refresh reports the device error.
+	h.fleet["10.1.1.1"].Set(func(f *devicetest.Fake) { f.Down = true })
+	if code, body := h.do("POST", path+"/refresh", nil); code != http.StatusBadGateway || !strings.Contains(body["error"].(string), "refused") {
+		t.Fatalf("refresh down = %d %v", code, body)
+	}
+
+	if code, _ := h.do("POST", "/api/v1/devices", map[string]any{"name": "x", "kind": "fortigate", "host": "1.2.3.4"}); code != http.StatusBadRequest {
+		t.Fatalf("no credentials = %d", code)
+	}
+
+	code, body = h.do("POST", "/api/v1/channels", map[string]any{"name": "hook", "kind": "webhook", "enabled": true, "config": map[string]any{"url": "https://example.invalid/x"}})
+	if code != http.StatusOK {
+		t.Fatalf("channel = %d %v", code, body)
+	}
+	if code, body := h.do("GET", "/api/v1/alert-rules", nil); code != http.StatusOK || len(body["items"].([]any)) != 6 {
+		t.Fatalf("rules = %d %v", code, body)
+	}
+	if code, _ := h.do("GET", "/api/v1/alerts?state=open", nil); code != http.StatusOK {
+		t.Fatalf("alerts = %d", code)
+	}
+
+	if code, _ := h.do("DELETE", path, nil); code != http.StatusNoContent {
+		t.Fatalf("delete = %d", code)
+	}
+
+	// Viewers can read but not change.
+	h2 := &harness{t: t, db: h.db, auth: h.auth, ts: h.ts, fleet: h.fleet}
+	jar, _ := cookiejar.New(nil)
+	h2.client = &http.Client{Jar: jar}
+	h2.signIn("viewer", auth.RoleViewer)
+	if code, _ := h2.do("GET", "/api/v1/devices", nil); code != http.StatusOK {
+		t.Fatalf("viewer list = %d", code)
+	}
+	if code, _ := h2.do("POST", "/api/v1/devices", input); code != http.StatusForbidden {
+		t.Fatalf("viewer create = %d", code)
+	}
+	if code, _ := h2.do("GET", "/api/v1/channels", nil); code != http.StatusForbidden {
+		t.Fatalf("viewer channels = %d", code)
 	}
 }
