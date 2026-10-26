@@ -159,6 +159,13 @@ func (s *srv) deleteDevice(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	var req struct {
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
+	if !decodeJSON(w, r, &req) || !s.reauth(w, r, req.Password, req.Code) {
+		return
+	}
 	d, err := s.inv.Get(r.Context(), id)
 	if err != nil {
 		s.serviceError(w, r, err)

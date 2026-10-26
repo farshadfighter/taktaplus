@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -20,6 +21,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/alerts"
 	"github.com/farshadfighter/taktaplus/internal/api"
 	"github.com/farshadfighter/taktaplus/internal/auth"
+	"github.com/farshadfighter/taktaplus/internal/backup"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus/internal/config"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
@@ -142,12 +144,17 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	alertSvc := alerts.New(pool, cfg.MasterKey, inv, guard, log.With("component", "alerts"))
 	mon := monitor.New(inv, alertSvc, log.With("component", "monitor"), monitor.Options{})
 	go mon.Run(ctx)
+	backups := backup.New(pool, cfg.MasterKey, inv, filepath.Join(cfg.DataDir, "backups"), log.With("component", "backup"), backup.Options{})
+	if err := backups.RecoverJobs(ctx); err != nil {
+		return err
+	}
+	go backups.Scheduler(ctx)
 
 	srv := &http.Server{
 		Addr: cfg.Listen,
 		Handler: api.New(api.Deps{
 			Log: log, DB: pool, Auth: authSvc, License: lic, UI: web.App(), CookieSecure: cfg.CookieSecure,
-			Inventory: inv, Alerts: alertSvc, Monitor: mon,
+			Inventory: inv, Alerts: alertSvc, Monitor: mon, Backups: backups,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

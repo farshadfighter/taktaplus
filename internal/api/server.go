@@ -16,6 +16,7 @@ import (
 
 	"github.com/farshadfighter/taktaplus/internal/alerts"
 	"github.com/farshadfighter/taktaplus/internal/auth"
+	"github.com/farshadfighter/taktaplus/internal/backup"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
@@ -33,6 +34,7 @@ type Deps struct {
 	Inventory    *inventory.Service
 	Alerts       *alerts.Service
 	Monitor      *monitor.Monitor
+	Backups      *backup.Service
 }
 
 type srv struct {
@@ -44,12 +46,13 @@ type srv struct {
 	inv          *inventory.Service
 	alerts       *alerts.Service
 	mon          *monitor.Monitor
+	backups      *backup.Service
 }
 
 // New returns the root HTTP handler.
 func New(d Deps) http.Handler {
 	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.License, cookieSecure: d.CookieSecure,
-		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor}
+		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(120*time.Second), securityHeaders)
@@ -124,6 +127,23 @@ func New(d Deps) http.Handler {
 			r.With(am).Put("/channels/{id}", s.saveChannel)
 			r.With(am).Delete("/channels/{id}", s.deleteChannel)
 			r.With(am).Post("/channels/{id}/test", s.testChannel)
+
+			badmin := requirePerm(auth.PermBackupsAdmin)
+			r.With(read).Get("/backups", s.listBackups)
+			r.With(requirePerm(auth.PermBackupsRun)).Post("/devices/{id}/backup", s.runBackup)
+			r.With(read).Get("/backups/diff", s.diffBackups)
+			r.With(read).Get("/backups/{id}/content", s.backupContent)
+			r.With(badmin).Get("/backups/{id}/download", s.downloadBackup)
+			r.With(badmin).Put("/backups/{id}", s.updateBackup)
+			r.With(badmin).Delete("/backups/{id}", s.deleteBackup)
+			r.With(requirePerm(auth.PermRestore)).Get("/backups/{id}/diff-current", s.diffCurrent)
+			r.With(requirePerm(auth.PermRestore)).Post("/backups/{id}/restore", s.restoreBackup)
+			r.With(read).Get("/restores", s.listRestores)
+			r.With(read).Get("/restores/{id}", s.getRestore)
+			r.With(read).Get("/backup-policies", s.listPolicies)
+			r.With(badmin).Post("/backup-policies", s.savePolicy)
+			r.With(badmin).Put("/backup-policies/{id}", s.savePolicy)
+			r.With(badmin).Delete("/backup-policies/{id}", s.deletePolicy)
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

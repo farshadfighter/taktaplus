@@ -26,6 +26,7 @@ import (
 
 	"github.com/farshadfighter/taktaplus/internal/alerts"
 	"github.com/farshadfighter/taktaplus/internal/auth"
+	"github.com/farshadfighter/taktaplus/internal/backup"
 	"github.com/farshadfighter/taktaplus/internal/device"
 	"github.com/farshadfighter/taktaplus/internal/device/devicetest"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
@@ -42,6 +43,7 @@ type harness struct {
 	ts     *httptest.Server
 	client *http.Client
 	fleet  devicetest.Fleet
+	secret []byte // TOTP secret of the signed-in user
 }
 
 // fakeLicenseServer signs a one-device license for any activation request.
@@ -110,9 +112,11 @@ func newHarness(t *testing.T) *harness {
 	}
 	al := alerts.New(db, box, inv, guard, log)
 	mon := monitor.New(inv, al, log, monitor.Options{})
+	bk := backup.New(db, box, inv, t.TempDir(), log, backup.Options{RebootWait: time.Millisecond, RebootPoll: time.Millisecond, RebootLimit: time.Second})
+	t.Cleanup(bk.Wait)
 
 	ui := fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}
-	ts := httptest.NewServer(New(Deps{Log: log, DB: db, Auth: svc, License: mgr, UI: ui, Inventory: inv, Alerts: al, Monitor: mon}))
+	ts := httptest.NewServer(New(Deps{Log: log, DB: db, Auth: svc, License: mgr, UI: ui, Inventory: inv, Alerts: al, Monitor: mon, Backups: bk}))
 	t.Cleanup(ts.Close)
 	jar, _ := cookiejar.New(nil)
 	return &harness{t: t, db: db, auth: svc, ts: ts, client: &http.Client{Jar: jar}, fleet: fleet}
@@ -159,6 +163,7 @@ func (h *harness) signIn(username string, role auth.Role) {
 	if code, body := h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": auth.TOTPCode(secret, time.Now())}); code != http.StatusOK {
 		h.t.Fatalf("mfa = %d %v", code, body)
 	}
+	h.secret = secret
 }
 
 func TestLoginAndRoles(t *testing.T) {
@@ -316,8 +321,11 @@ func TestDevices(t *testing.T) {
 		t.Fatalf("alerts = %d", code)
 	}
 
-	if code, _ := h.do("DELETE", path, nil); code != http.StatusNoContent {
-		t.Fatalf("delete = %d", code)
+	if code, _ := h.do("DELETE", path, map[string]string{"password": "wrong", "code": "000000"}); code != http.StatusForbidden {
+		t.Fatalf("delete without reauth = %d", code)
+	}
+	if code, body := h.do("DELETE", path, h.reauth()); code != http.StatusNoContent {
+		t.Fatalf("delete = %d %v", code, body)
 	}
 
 	// Viewers can read but not change.
@@ -333,5 +341,78 @@ func TestDevices(t *testing.T) {
 	}
 	if code, _ := h2.do("GET", "/api/v1/channels", nil); code != http.StatusForbidden {
 		t.Fatalf("viewer channels = %d", code)
+	}
+}
+
+func (h *harness) reauth() map[string]string {
+	return map[string]string{"password": "correct horse battery", "code": auth.TOTPCode(h.secret, time.Now())}
+}
+
+func TestBackups(t *testing.T) {
+	h := newHarness(t)
+	cfg := "#config-version=FG100F-7.04\nconfig system admin\n    edit \"admin\"\n        set password ENC SH2secret\n    next\nend\n"
+	h.fleet["10.1.1.1"] = &devicetest.Fake{Info: device.Info{Serial: "FG100F0001"}, Config: []byte(cfg)}
+	h.signIn("root", auth.RoleSuperAdmin)
+	if code, body := h.do("POST", "/api/v1/license/activate", map[string]string{"key": "TPK-GOOD"}); code != http.StatusOK {
+		t.Fatalf("activate = %d %v", code, body)
+	}
+	code, body := h.do("POST", "/api/v1/devices", map[string]any{"name": "FG", "kind": "fortigate", "host": "10.1.1.1",
+		"credentials": map[string]string{"api_token": "t"}})
+	if code != http.StatusCreated {
+		t.Fatalf("create = %d %v", code, body)
+	}
+	dev := strconv.Itoa(int(body["id"].(float64)))
+
+	code, body = h.do("POST", "/api/v1/devices/"+dev+"/backup", nil)
+	if code != http.StatusOK || body["unchanged"] != false {
+		t.Fatalf("backup = %d %v", code, body)
+	}
+	bid := strconv.Itoa(int(body["backup"].(map[string]any)["id"].(float64)))
+	if code, body := h.do("POST", "/api/v1/devices/"+dev+"/backup", nil); code != http.StatusOK || body["unchanged"] != true {
+		t.Fatalf("second backup = %d %v", code, body)
+	}
+
+	code, body = h.do("GET", "/api/v1/backups/"+bid+"/content", nil)
+	if code != http.StatusOK || strings.Contains(body["content"].(string), "SH2secret") {
+		t.Fatalf("content = %d %v", code, body)
+	}
+	if code, body := h.do("GET", "/api/v1/backups/"+bid+"/download", nil); code != http.StatusOK || !strings.Contains(body["raw"].(string), "SH2secret") {
+		t.Fatalf("download = %d %v", code, body)
+	}
+	if code, body := h.do("GET", "/api/v1/backups?device="+dev, nil); code != http.StatusOK || len(body["items"].([]any)) != 1 {
+		t.Fatalf("list = %d %v", code, body)
+	}
+
+	h.fleet["10.1.1.1"].Set(func(f *devicetest.Fake) { f.Config = []byte(strings.Replace(cfg, "SH2secret", "SH2other", 1)) })
+	code, body = h.do("GET", "/api/v1/backups/"+bid+"/diff-current", nil)
+	if code != http.StatusOK || len(body["changes"].([]any)) != 1 || strings.Contains(fmt.Sprint(body), "SH2") {
+		t.Fatalf("diff-current = %d %v", code, body)
+	}
+
+	if code, _ := h.do("POST", "/api/v1/backups/"+bid+"/restore", map[string]string{"password": "correct horse battery", "code": "000000"}); code != http.StatusForbidden {
+		t.Fatalf("restore with bad code = %d", code)
+	}
+	code, body = h.do("POST", "/api/v1/backups/"+bid+"/restore", h.reauth())
+	if code != http.StatusAccepted || body["status"] != "waiting" {
+		t.Fatalf("restore = %d %v", code, body)
+	}
+	job := strconv.Itoa(int(body["id"].(float64)))
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, body = h.do("GET", "/api/v1/restores/"+job, nil)
+		if body["status"] == "succeeded" || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if body["status"] != "succeeded" {
+		t.Fatalf("restore job = %v", body)
+	}
+
+	if code, body := h.do("POST", "/api/v1/backup-policies", map[string]any{"name": "Hourly", "schedule": "0 * * * *", "keep_count": 48, "enabled": true}); code != http.StatusOK {
+		t.Fatalf("policy = %d %v", code, body)
+	}
+	if code, body := h.do("GET", "/api/v1/backup-policies", nil); code != http.StatusOK || len(body["items"].([]any)) != 2 {
+		t.Fatalf("policies = %d %v", code, body)
 	}
 }

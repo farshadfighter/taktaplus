@@ -306,3 +306,28 @@ var dummyHash = func() string {
 	}
 	return h
 }()
+
+// Reauthenticate confirms a signed-in user's password and current TOTP code
+// before a sensitive operation (restore, deleting a device). Failures count
+// towards the lockout like login failures.
+func (s *Service) Reauthenticate(ctx context.Context, userID int64, password, code string) error {
+	r, err := scanUser(s.db.QueryRow(ctx, `SELECT `+userColumns+` FROM users u WHERE u.id = $1`, userID))
+	if err != nil {
+		return err
+	}
+	if r.lockedUntil != nil && s.now().Before(*r.lockedUntil) {
+		return ErrLocked
+	}
+	ok, err := CheckPassword(r.hash, password)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		if err := s.recordFailure(ctx, r.ID, r.failed); err != nil {
+			return err
+		}
+		return ErrInvalidCredentials
+	}
+	_, err = s.checkCode(ctx, userID, code)
+	return err
+}
