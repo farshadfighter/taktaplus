@@ -18,6 +18,11 @@ import (
 // expiring on the paired date (grace period 14 days).
 func Guard(t testing.TB, devices map[string]licformat.Date) *license.Guard {
 	t.Helper()
+	return guard(t, devices, 0, licformat.Date{})
+}
+
+func guard(t testing.TB, devices map[string]licformat.Date, otpUsers int, otpExpires licformat.Date) *license.Guard {
+	t.Helper()
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	id, err := license.LoadOrCreateIdentity(t.TempDir())
 	if err != nil {
@@ -45,6 +50,9 @@ func Guard(t testing.TB, devices map[string]licformat.Date) *license.Guard {
 			latest = exp
 		}
 	}
+	if otpUsers > 0 {
+		lic.OTP = []licformat.OTPItem{{Users: otpUsers, Expires: otpExpires}}
+	}
 	lic.NotAfter = latest.EndOfDay().AddDate(0, 0, 14)
 	token, err := lic.Sign(priv)
 	if err != nil {
@@ -61,4 +69,11 @@ func platform(serial string) licformat.Platform {
 		return licformat.PlatformFortiWeb
 	}
 	return licformat.PlatformFortiGate
+}
+
+// GuardOTP returns a guard whose license grants users two-factor users
+// until expires, plus one device.
+func GuardOTP(t testing.TB, users int, expires licformat.Date) *license.Guard {
+	t.Helper()
+	return guard(t, map[string]licformat.Date{"FGOTP0001": expires}, users, expires)
 }
