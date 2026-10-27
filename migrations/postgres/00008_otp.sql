@@ -51,6 +51,7 @@ CREATE TABLE fortigate_sms_users (
 CREATE TABLE radius_clients (
     device_id bigint PRIMARY KEY REFERENCES devices (id) ON DELETE CASCADE,
     secret    bytea NOT NULL,                 -- sealed
+    source_ip text NOT NULL DEFAULT '',       -- when the device sends RADIUS from another address
     enabled   boolean NOT NULL DEFAULT true
 );
 
