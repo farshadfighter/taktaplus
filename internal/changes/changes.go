@@ -52,6 +52,9 @@ func (e InputError) Error() string { return e.msg }
 
 func invalidf(format string, a ...any) error { return InputError{fmt.Sprintf(format, a...)} }
 
+// Invalid returns an InputError, for runners rejecting a spec or device.
+func Invalid(msg string) error { return InputError{msg} }
+
 // Runner executes one kind of change.
 type Runner interface {
 	// Preview validates spec for a device and describes what will run there.

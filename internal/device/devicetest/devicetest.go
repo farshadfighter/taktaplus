@@ -4,6 +4,7 @@ package devicetest
 import (
 	"context"
 	"errors"
+	"io"
 	"sync"
 
 	"github.com/farshadfighter/taktaplus/internal/device"
@@ -23,6 +24,12 @@ type Fake struct {
 	Down      bool
 	Restored  [][]byte
 	Calls     map[string]int
+
+	Installed    []string // "type:name" per API install
+	OnInstall    func(f *Fake, typ, name string, data []byte)
+	Scripts      []string
+	ScriptOutput string
+	OnScript     func(f *Fake, script string) (string, error)
 }
 
 func (f *Fake) call(name string) error {
@@ -98,4 +105,37 @@ func (fl Fleet) Factory() func(device.Config) device.Driver {
 		}
 		return &Fake{Down: true}
 	}
+}
+
+// InstallPackage records an API install and calls OnInstall.
+func (f *Fake) InstallPackage(_ context.Context, typ, name string, r io.Reader) error {
+	if err := f.call("install"); err != nil {
+		return err
+	}
+	data, _ := io.ReadAll(r)
+	f.mu.Lock()
+	f.Installed = append(f.Installed, typ+":"+name)
+	cb := f.OnInstall
+	f.mu.Unlock()
+	if cb != nil {
+		cb(f, typ, name, data)
+	}
+	return nil
+}
+
+// RunScript records a CLI script and returns ScriptOutput (or the output
+// of OnScript).
+func (f *Fake) RunScript(_ context.Context, script string) (string, error) {
+	if err := f.call("script"); err != nil {
+		return "", err
+	}
+	f.mu.Lock()
+	f.Scripts = append(f.Scripts, script)
+	cb := f.OnScript
+	out := f.ScriptOutput
+	f.mu.Unlock()
+	if cb != nil {
+		return cb(f, script)
+	}
+	return out, nil
 }

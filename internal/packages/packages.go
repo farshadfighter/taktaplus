@@ -291,6 +291,19 @@ func (s *Service) Get(ctx context.Context, id int64) (*Package, error) {
 	return p, err
 }
 
+// BySHA returns the package with the given hash.
+func (s *Service) BySHA(ctx context.Context, sha string) (*Package, error) {
+	rows, err := s.db.Query(ctx, `SELECT `+pkgCols+` FROM packages WHERE sha256 = $1`, sha)
+	if err != nil {
+		return nil, err
+	}
+	p, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByPos[Package])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return p, err
+}
+
 // Meta is the editable description of an unverified package.
 type Meta struct {
 	Platform    string    `json:"platform"`

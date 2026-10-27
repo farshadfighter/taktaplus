@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -27,11 +28,13 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/alerts"
 	"github.com/farshadfighter/taktaplus/internal/auth"
 	"github.com/farshadfighter/taktaplus/internal/backup"
+	"github.com/farshadfighter/taktaplus/internal/changes"
 	"github.com/farshadfighter/taktaplus/internal/device"
 	"github.com/farshadfighter/taktaplus/internal/device/devicetest"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
+	"github.com/farshadfighter/taktaplus/internal/scripts"
 	"github.com/farshadfighter/taktaplus/internal/secretbox"
 	"github.com/farshadfighter/taktaplus/internal/testdb"
 )
@@ -44,6 +47,7 @@ type harness struct {
 	client *http.Client
 	fleet  devicetest.Fleet
 	secret []byte // TOTP secret of the signed-in user
+	ch     *changes.Service
 }
 
 // fakeLicenseServer signs a one-device license for any activation request.
@@ -116,10 +120,14 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(bk.Wait)
 
 	ui := fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}
-	ts := httptest.NewServer(New(Deps{Log: log, DB: db, Auth: svc, License: mgr, UI: ui, Inventory: inv, Alerts: al, Monitor: mon, Backups: bk}))
+	ch := changes.New(db, inv, bk, log)
+	sc := scripts.New(db, inv)
+	ch.Register(scripts.Kind, scripts.NewRunner(sc))
+	ts := httptest.NewServer(New(Deps{Log: log, DB: db, Auth: svc, License: mgr, UI: ui, Inventory: inv, Alerts: al, Monitor: mon, Backups: bk,
+		Changes: ch, Scripts: sc}))
 	t.Cleanup(ts.Close)
 	jar, _ := cookiejar.New(nil)
-	return &harness{t: t, db: db, auth: svc, ts: ts, client: &http.Client{Jar: jar}, fleet: fleet}
+	return &harness{t: t, db: db, auth: svc, ts: ts, client: &http.Client{Jar: jar}, fleet: fleet, ch: ch}
 }
 
 func (h *harness) do(method, path string, body any) (int, map[string]any) {
@@ -414,5 +422,73 @@ func TestBackups(t *testing.T) {
 	}
 	if code, body := h.do("GET", "/api/v1/backup-policies", nil); code != http.StatusOK || len(body["items"].([]any)) != 2 {
 		t.Fatalf("policies = %d %v", code, body)
+	}
+}
+
+func TestChangeWorkflowAPI(t *testing.T) {
+	h := newHarness(t)
+	h.fleet["10.1.1.1"] = &devicetest.Fake{Info: device.Info{Serial: "FG100F0001"}, Config: []byte("#config-version=x\nconfig system global\nend\n")}
+	h.signIn("op", auth.RoleAdmin)
+	// A superadmin activates the license and approves; the admin requests.
+	root := &harness{t: t, db: h.db, auth: h.auth, ts: h.ts, fleet: h.fleet, ch: h.ch}
+	jar, _ := cookiejar.New(nil)
+	root.client = &http.Client{Jar: jar}
+	root.signIn("root", auth.RoleSuperAdmin)
+	if code, body := root.do("POST", "/api/v1/license/activate", map[string]string{"key": "TPK-GOOD"}); code != http.StatusOK {
+		t.Fatalf("activate = %d %v", code, body)
+	}
+	code, body := h.do("POST", "/api/v1/devices", map[string]any{"name": "FG", "kind": "fortigate", "host": "10.1.1.1",
+		"credentials": map[string]string{"ssh_user": "admin", "ssh_password": "pw"}})
+	if code != http.StatusCreated {
+		t.Fatalf("device = %d %v", code, body)
+	}
+	dev := body["id"].(float64)
+
+	code, body = h.do("POST", "/api/v1/scripts", map[string]any{"name": "Hostname", "body": "config system global\n  set hostname {{ .Vars.name }}\nend"})
+	if code != http.StatusOK || body["read_only"] != false {
+		t.Fatalf("script = %d %v", code, body)
+	}
+	sid := body["id"].(float64)
+	if code, _ := h.do("POST", "/api/v1/scripts/"+strconv.Itoa(int(sid))+"/run", map[string]any{"device_ids": []float64{dev}}); code != http.StatusBadRequest {
+		t.Fatalf("read-only run of a config script = %d", code)
+	}
+	code, body = h.do("POST", "/api/v1/changes", map[string]any{"kind": "script", "title": "Rename", "device_ids": []float64{dev},
+		"spec": map[string]any{"script_id": sid, "vars": map[string]string{"name": "FG-NEW"}}})
+	if code != http.StatusCreated || body["status"] != "draft" || body["required_approvals"] != 1.0 {
+		t.Fatalf("create change = %d %v", code, body)
+	}
+	cid := strconv.Itoa(int(body["id"].(float64)))
+	code, body = h.do("GET", "/api/v1/changes/"+cid, nil)
+	target := body["targets"].([]any)[0].(map[string]any)
+	if code != http.StatusOK || !strings.Contains(target["preview"].(string), "set hostname FG-NEW") {
+		t.Fatalf("get change = %d %v", code, body)
+	}
+	if code, body := h.do("POST", "/api/v1/changes/"+cid+"/submit", map[string]any{}); code != http.StatusOK || body["change"].(map[string]any)["status"] != "pending" {
+		t.Fatalf("submit = %d %v", code, body)
+	}
+	if code, _ := h.do("POST", "/api/v1/changes/"+cid+"/approve", map[string]string{"comment": "mine"}); code != http.StatusConflict {
+		t.Fatalf("self approval = %d", code)
+	}
+	if code, body := root.do("POST", "/api/v1/changes/"+cid+"/approve", map[string]string{"comment": "ok"}); code != http.StatusOK ||
+		body["change"].(map[string]any)["status"] != "approved" {
+		t.Fatalf("approve = %d %v", code, body)
+	}
+	var wg sync.WaitGroup
+	if err := h.ch.Tick(context.Background(), &wg); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+	_, body = h.do("GET", "/api/v1/changes/"+cid, nil)
+	if body["change"].(map[string]any)["status"] != "succeeded" || len(h.fleet["10.1.1.1"].Scripts) != 1 {
+		t.Fatalf("after run = %v", body)
+	}
+	if code, body := h.do("POST", "/api/v1/maintenance/windows", map[string]any{"name": "Night", "weekdays": []int{4}, "start_time": "22:00", "minutes": 240, "enabled": true}); code != http.StatusForbidden {
+		t.Fatalf("admin editing windows = %d %v", code, body)
+	}
+	if code, _ := root.do("POST", "/api/v1/maintenance/windows", map[string]any{"name": "Night", "weekdays": []int{4}, "start_time": "22:00", "minutes": 240, "enabled": true}); code != http.StatusOK {
+		t.Fatalf("window = %d", code)
+	}
+	if code, body := h.do("GET", "/api/v1/maintenance", nil); code != http.StatusOK || len(body["windows"].([]any)) != 1 {
+		t.Fatalf("maintenance = %d %v", code, body)
 	}
 }

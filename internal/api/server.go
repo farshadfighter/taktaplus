@@ -19,10 +19,13 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/auth"
 	"github.com/farshadfighter/taktaplus/internal/backup"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
+	"github.com/farshadfighter/taktaplus/internal/changes"
+	"github.com/farshadfighter/taktaplus/internal/deploy"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
 	"github.com/farshadfighter/taktaplus/internal/packages"
+	"github.com/farshadfighter/taktaplus/internal/scripts"
 )
 
 // Deps are the server's collaborators.
@@ -39,6 +42,9 @@ type Deps struct {
 	Backups      *backup.Service
 	Packages     *packages.Service
 	TmpDir       string // for large uploads; default os.TempDir()
+	Changes      *changes.Service
+	Scripts      *scripts.Service
+	Firmware     *deploy.Firmware
 }
 
 type srv struct {
@@ -53,12 +59,16 @@ type srv struct {
 	backups      *backup.Service
 	pkgs         *packages.Service
 	tmpDir       string
+	changes      *changes.Service
+	scripts      *scripts.Service
+	firmware     *deploy.Firmware
 }
 
 // New returns the root HTTP handler.
 func New(d Deps) http.Handler {
 	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.License, cookieSecure: d.CookieSecure,
-		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups, pkgs: d.Packages, tmpDir: d.TmpDir}
+		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups, pkgs: d.Packages, tmpDir: d.TmpDir,
+		changes: d.Changes, scripts: d.Scripts, firmware: d.Firmware}
 	if s.tmpDir == "" {
 		s.tmpDir = os.TempDir()
 	}
@@ -171,6 +181,33 @@ func New(d Deps) http.Handler {
 			r.With(pm).Put("/package-sources/{id}", s.saveSource)
 			r.With(pm).Delete("/package-sources/{id}", s.deleteSource)
 			r.With(pm).Post("/package-sources/{id}/sync", s.syncSource)
+
+			create := requirePerm(auth.PermChangeCreate)
+			approve := requirePerm(auth.PermChangeApprove)
+			r.With(read).Get("/changes", s.listChanges)
+			r.With(create).Post("/changes", s.createChange)
+			r.With(read).Get("/changes/{id}", s.getChange)
+			r.With(create).Post("/changes/{id}/submit", s.submitChange())
+			r.With(approve).Post("/changes/{id}/approve", s.decideChange(true))
+			r.With(approve).Post("/changes/{id}/reject", s.decideChange(false))
+			r.With(create).Post("/changes/{id}/cancel", s.cancelChange())
+			r.With(approve).Post("/changes/{id}/run-now", s.runChangeNow())
+			r.With(read).Get("/maintenance", s.listWindows)
+			r.With(requirePerm(auth.PermSettings)).Post("/maintenance/windows", s.saveWindow)
+			r.With(requirePerm(auth.PermSettings)).Put("/maintenance/windows/{id}", s.saveWindow)
+			r.With(requirePerm(auth.PermSettings)).Delete("/maintenance/windows/{id}", s.deleteWindow)
+			r.With(requirePerm(auth.PermSettings)).Post("/maintenance/policies", s.setApprovalPolicy)
+
+			r.With(read).Get("/scripts", s.listScripts)
+			r.With(create).Post("/scripts", s.saveScript)
+			r.With(create).Put("/scripts/{id}", s.saveScript)
+			r.With(create).Delete("/scripts/{id}", s.deleteScript)
+			r.With(read).Post("/scripts/preview", s.previewScript)
+			r.With(create).Post("/scripts/{id}/run", s.runScriptReadOnly)
+			r.With(read).Get("/scripts/{id}/runs", s.scriptRuns)
+			r.With(create).Post("/variables", s.setVariable)
+			r.With(create).Delete("/variables/{id}", s.deleteVariable)
+			r.With(read).Get("/devices/{id}/firmware-path", s.firmwarePath)
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

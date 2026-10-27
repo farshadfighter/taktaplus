@@ -1,6 +1,7 @@
 package device
 
 import (
+	"bufio"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -284,6 +285,23 @@ func fakeSSH(t *testing.T, replies map[string]string) (host string, port int, ho
 					go func() {
 						defer ch.Close()
 						for req := range creqs {
+							if req.Type == "shell" {
+								_ = req.Reply(true, nil)
+								sc := bufio.NewScanner(ch)
+								for sc.Scan() {
+									line := strings.TrimSpace(sc.Text())
+									if line == "exit" {
+										break
+									}
+									out := "FG # " + line + "\n"
+									if r, ok := replies[line]; ok {
+										out += r
+									}
+									_, _ = io.WriteString(ch, strings.ReplaceAll(out, "\n", "\r\n"))
+								}
+								_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{0}))
+								return
+							}
 							if req.Type != "exec" {
 								_ = req.Reply(false, nil)
 								continue
@@ -353,5 +371,73 @@ func TestFallback(t *testing.T) {
 	}
 	if err := d.RestoreConfig(context.Background(), []byte("x")); err == nil || errors.Is(err, ErrUnsupported) {
 		t.Fatalf("restore should report the API error, got %v", err)
+	}
+}
+
+func TestCheckCLIOutput(t *testing.T) {
+	ok := "FG-HQ # config system global\nFG-HQ (global) # set hostname x\nFG-HQ (global) # end\n"
+	if err := CheckCLIOutput(ok); err != nil {
+		t.Fatalf("clean output = %v", err)
+	}
+	bad := "FG-HQ # config firewall address\nFG-HQ (address) # delete nope\nentry not found in datasource\nCommand fail. Return code -3\n"
+	var ce CLIError
+	if err := CheckCLIOutput(bad); !errors.As(err, &ce) || len(ce.Lines) != 2 {
+		t.Fatalf("errors = %v", err)
+	}
+}
+
+func TestFortiGateInstallPackage(t *testing.T) {
+	var got map[string]any
+	var path string
+	mux := http.NewServeMux()
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "success"})
+	}
+	mux.HandleFunc("POST /api/v2/monitor/system/fortiguard/manual-update", handler)
+	mux.HandleFunc("POST /api/v2/monitor/system/firmware/upgrade", handler)
+	ts := httptest.NewTLSServer(mux)
+	defer ts.Close()
+	host, port := hostPort(t, ts.URL)
+	d := New(Config{Kind: KindFortiGate, Host: host, HTTPSPort: port, APIToken: "t", PinnedSHA256: certPin(ts)})
+	inst, ok := AsInstaller(d)
+	if !ok {
+		t.Fatal("no installer")
+	}
+	if err := inst.InstallPackage(context.Background(), "ips_db", "x.pkg", strings.NewReader("IPS")); err != nil {
+		t.Fatal(err)
+	}
+	if path != "/api/v2/monitor/system/fortiguard/manual-update" || got["file_content"] != base64.StdEncoding.EncodeToString([]byte("IPS")) {
+		t.Fatalf("manual update = %s %v", path, got)
+	}
+	_ = inst.InstallPackage(context.Background(), "firmware", "fw.out", strings.NewReader("FW"))
+	if path != "/api/v2/monitor/system/firmware/upgrade" || got["source"] != "upload" {
+		t.Fatalf("firmware = %s %v", path, got)
+	}
+	if _, ok := AsCLI(d); ok {
+		t.Fatal("API-only driver offers a CLI")
+	}
+}
+
+func TestRunScript(t *testing.T) {
+	host, port, hk := fakeSSH(t, map[string]string{
+		"execute restore ips tftp tpX-ips.pkg 10.0.0.5": "This operation will replace the current IPS definitions.\nDo you want to continue? (y/n)",
+		"y":           "Get file from tftp server OK.\n",
+		"delete nope": "entry not found in datasource\nCommand fail. Return code -3\n",
+	})
+	d := New(Config{Kind: KindFortiGate, Host: host, SSHPort: port, SSHUser: "admin", SSHPassword: "secret", SSHHostKey: hk})
+	cli, ok := AsCLI(d)
+	if !ok {
+		t.Fatal("no CLI")
+	}
+	out, err := cli.RunScript(context.Background(), "execute restore ips tftp tpX-ips.pkg 10.0.0.5\ny")
+	if err != nil || !strings.Contains(out, "Get file from tftp server OK") {
+		t.Fatalf("script = %q %v", out, err)
+	}
+	_, err = cli.RunScript(context.Background(), "config firewall address\ndelete nope\nend")
+	var ce CLIError
+	if !errors.As(err, &ce) {
+		t.Fatalf("failing script = %v", err)
 	}
 }

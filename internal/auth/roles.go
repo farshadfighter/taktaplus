@@ -22,6 +22,7 @@ const (
 	PermRestore       Perm = "backups.restore"
 	PermAlertsManage  Perm = "alerts.manage"
 	PermPackages      Perm = "packages.manage" // sources, uploads, repository
+	PermChangeCreate  Perm = "changes.create"  // deployments, scripts, firmware upgrades
 	PermChangeApprove Perm = "changes.approve"
 	PermLicenseRead   Perm = "license.read"
 	PermLicenseManage Perm = "license.manage"
@@ -33,14 +34,14 @@ const (
 var rolePerms = map[Role][]Perm{
 	RoleSuperAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
-		PermChangeApprove, PermLicenseRead, PermLicenseManage, PermUsersManage, PermAuditRead, PermSettings, PermPackages,
+		PermChangeApprove, PermLicenseRead, PermLicenseManage, PermUsersManage, PermAuditRead, PermSettings, PermPackages, PermChangeCreate,
 	},
 	RoleAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
-		PermChangeApprove, PermLicenseRead, PermAuditRead, PermPackages,
+		PermChangeApprove, PermLicenseRead, PermAuditRead, PermPackages, PermChangeCreate,
 	},
 	RoleApprover: {PermDevicesRead, PermChangeApprove, PermLicenseRead, PermAuditRead},
-	RoleOperator: {PermDevicesRead, PermBackupsRun, PermLicenseRead},
+	RoleOperator: {PermDevicesRead, PermBackupsRun, PermLicenseRead, PermChangeCreate},
 	RoleViewer:   {PermDevicesRead, PermLicenseRead},
 }
 
