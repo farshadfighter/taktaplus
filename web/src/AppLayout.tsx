@@ -16,7 +16,8 @@ export const roleNames: Record<string, string> = {
 function NavMenu({ onNavigate, openAlerts, pending }: { onNavigate?: () => void; openAlerts: number; pending: number }) {
   const { user } = useAuth()
   const { pathname } = useLocation()
-  const key = '/' + (pathname.split('/')[1] ?? '')
+  const parts = pathname.split('/')
+  const key = parts[1] === 'otp' ? `/otp/${parts[2] ?? ''}` : '/' + (parts[1] ?? '')
   const link = (to: string, label: React.ReactNode) => ({ key: to, label: <Link to={to} onClick={onNavigate}>{label}</Link> })
   const system = [
     ...(can(user, 'users.manage') ? [link('/users', 'کاربران پنل')] : []),
@@ -43,6 +44,10 @@ function NavMenu({ onNavigate, openAlerts, pending }: { onNavigate?: () => void;
         link('/packages', 'پکیج‌ها و منابع'),
         link('/maintenance', 'پنجره‌ها و تأیید'),
       ],
+    },
+    {
+      type: 'group' as const, label: 'احراز هویت دو مرحله‌ای',
+      children: [link('/otp/users', 'کاربران پیامکی'), link('/otp/settings', 'تنظیمات و گزارش')],
     },
     ...(system.length ? [{ type: 'group' as const, label: 'سیستم', children: system }] : []),
   ]

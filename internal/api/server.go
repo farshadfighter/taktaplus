@@ -24,8 +24,12 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
+	"github.com/farshadfighter/taktaplus/internal/otp"
 	"github.com/farshadfighter/taktaplus/internal/packages"
+	"github.com/farshadfighter/taktaplus/internal/radiussrv"
 	"github.com/farshadfighter/taktaplus/internal/scripts"
+	"github.com/farshadfighter/taktaplus/internal/sms"
+	"github.com/farshadfighter/taktaplus/internal/smtpgw"
 )
 
 // Deps are the server's collaborators.
@@ -45,6 +49,12 @@ type Deps struct {
 	Changes      *changes.Service
 	Scripts      *scripts.Service
 	Firmware     *deploy.Firmware
+	OTP          *otp.Service
+	SMS          *sms.Service
+	Radius       *radiussrv.Server
+	Gateway      *smtpgw.Gateway
+	RadiusAddr   string // for display
+	SMTPAddr     string
 }
 
 type srv struct {
@@ -62,13 +72,20 @@ type srv struct {
 	changes      *changes.Service
 	scripts      *scripts.Service
 	firmware     *deploy.Firmware
+	otp          *otp.Service
+	sms          *sms.Service
+	radius       *radiussrv.Server
+	smtpgw       *smtpgw.Gateway
+	radiusAddr   string
+	smtpAddr     string
 }
 
 // New returns the root HTTP handler.
 func New(d Deps) http.Handler {
 	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.License, cookieSecure: d.CookieSecure,
 		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups, pkgs: d.Packages, tmpDir: d.TmpDir,
-		changes: d.Changes, scripts: d.Scripts, firmware: d.Firmware}
+		changes: d.Changes, scripts: d.Scripts, firmware: d.Firmware,
+		otp: d.OTP, sms: d.SMS, radius: d.Radius, smtpgw: d.Gateway, radiusAddr: d.RadiusAddr, smtpAddr: d.SMTPAddr}
 	if s.tmpDir == "" {
 		s.tmpDir = os.TempDir()
 	}
@@ -208,6 +225,29 @@ func New(d Deps) http.Handler {
 			r.With(create).Post("/variables", s.setVariable)
 			r.With(create).Delete("/variables/{id}", s.deleteVariable)
 			r.With(read).Get("/devices/{id}/firmware-path", s.firmwarePath)
+
+			om := requirePerm(auth.PermOTP)
+			r.With(read).Get("/otp", s.otpOverview)
+			r.With(read).Get("/otp/users", s.listOTPUsers)
+			r.With(om).Post("/otp/users", s.saveOTPUser)
+			r.With(om).Put("/otp/users/{id}", s.saveOTPUser)
+			r.With(om).Delete("/otp/users/{id}", s.otpUserAction(s.otp.Delete, "otp_user.delete"))
+			r.With(om).Post("/otp/users/{id}/unlock", s.otpUserAction(s.otp.Unlock, "otp_user.unlock"))
+			r.With(om).Put("/otp/policy", saveSetting(s, "otp_policy", s.otp.SavePolicy))
+			r.With(om).Put("/otp/sms", saveSetting(s, "sms", s.sms.SaveConfig))
+			r.With(om).Put("/otp/ldap", saveSetting(s, "ldap", s.otp.SaveLDAP))
+			r.With(om).Put("/otp/radius", saveSetting(s, "radius", s.radius.SaveConfig))
+			r.With(om).Put("/otp/gateway", saveSetting(s, "smtpgw", s.smtpgw.SaveConfig))
+			r.With(om).Post("/otp/sms/test", s.smsTest)
+			r.With(om).Get("/otp/sms/credit", s.smsCredit)
+			r.With(read).Get("/otp/log", s.smsMessages)
+			r.With(om).Get("/otp/directory", s.directorySearch)
+			r.With(om).Post("/otp/directory/import", s.directoryImport)
+			r.With(read).Get("/otp/radius/clients", s.radiusClients)
+			r.With(om).Put("/otp/radius/clients/{id}", s.setRadiusClient)
+			r.With(om).Get("/otp/fortigate-config", s.fortigateOTPConfig)
+			r.With(read).Get("/otp/gateway/users", s.gatewayUsers)
+			r.With(om).Post("/otp/gateway/sync", s.gatewaySync)
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

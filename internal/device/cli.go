@@ -155,3 +155,48 @@ func (f *fortiGateAPI) InstallPackage(ctx context.Context, typ, _ string, r io.R
 	_, err = f.rc.do(ctx, http.MethodPost, "/api/v2/monitor/system/fortiguard/manual-update", map[string]any{"file_content": content})
 	return err
 }
+
+// LocalUser is a FortiGate local user.
+type LocalUser struct {
+	Name      string `json:"name"`
+	TwoFactor string `json:"two_factor"` // disable, fortitoken, email, sms
+	Phone     string `json:"phone"`
+	Enabled   bool   `json:"enabled"`
+}
+
+// LocalUserLister lists the device's local users.
+type LocalUserLister interface {
+	ListLocalUsers(ctx context.Context) ([]LocalUser, error)
+}
+
+// AsUserLister returns the driver's local user lister, if any.
+func AsUserLister(d Driver) (LocalUserLister, bool) {
+	switch v := d.(type) {
+	case fallback:
+		if c, ok := AsUserLister(v.primary); ok {
+			return c, true
+		}
+		return AsUserLister(v.secondary)
+	case LocalUserLister:
+		return v, true
+	}
+	return nil, false
+}
+
+// ListLocalUsers reads /cmdb/user/local.
+func (f *fortiGateAPI) ListLocalUsers(ctx context.Context) ([]LocalUser, error) {
+	var res fgResp[[]struct {
+		Name      string `json:"name"`
+		Status    string `json:"status"`
+		TwoFactor string `json:"two-factor"`
+		SMSPhone  string `json:"sms-phone"`
+	}]
+	if err := f.rc.getJSON(ctx, "/api/v2/cmdb/user/local", &res); err != nil {
+		return nil, err
+	}
+	out := make([]LocalUser, 0, len(res.Results))
+	for _, u := range res.Results {
+		out = append(out, LocalUser{Name: u.Name, TwoFactor: u.TwoFactor, Phone: u.SMSPhone, Enabled: u.Status != "disable"})
+	}
+	return out, nil
+}

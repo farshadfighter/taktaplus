@@ -21,6 +21,8 @@ import Firmware from './pages/Firmware'
 import Scripts from './pages/Scripts'
 import ScriptEdit from './pages/ScriptEdit'
 import Maintenance from './pages/Maintenance'
+import OtpUsers from './pages/OtpUsers'
+import OtpSettings from './pages/OtpSettings'
 
 function Protected() {
   const { user, loading } = useAuth()
@@ -54,6 +56,8 @@ export default function App() {
           <Route path="scripts" element={<Scripts />} />
           <Route path="scripts/:id" element={<ScriptEdit />} />
           <Route path="maintenance" element={<Maintenance />} />
+          <Route path="otp/users" element={<OtpUsers />} />
+          <Route path="otp/settings" element={<OtpSettings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

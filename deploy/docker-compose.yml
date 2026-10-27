@@ -68,6 +68,8 @@ services:
       - "69:6969/udp"
       - "21:2121"
       - "30000-30009:30000-30009"
+      - "1812:1812/udp"   # RADIUS for SMS two-factor
+      - "25:2525"         # email-to-SMS gateway
     volumes:
       - data:/var/lib/taktaplus
       # Host identifiers for the license fingerprint (read-only).
