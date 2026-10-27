@@ -29,6 +29,7 @@ type Config struct {
 	FilePublicIP    string         // TAKTAPLUS_FILESERVER_IP: address devices use to reach TaktaPlus
 	FTPPassive      string         // TAKTAPLUS_FTP_PASSIVE_PORTS, default "30000-30009"
 	FTPPublicPort   int            // TAKTAPLUS_FTP_PUBLIC_PORT: FTP port as devices see it; default the listen port
+	FortiWebUpload  string         // TAKTAPLUS_FORTIWEB_UPLOAD_PATH: FortiWeb API path for signature uploads
 }
 
 // FromEnv reads the configuration from the process environment.
@@ -48,6 +49,7 @@ func FromEnv() (Config, error) {
 		FTPListen:       getenv("TAKTAPLUS_FTP_LISTEN", ":2121"),
 		FilePublicIP:    os.Getenv("TAKTAPLUS_FILESERVER_IP"),
 		FTPPassive:      getenv("TAKTAPLUS_FTP_PASSIVE_PORTS", "30000-30009"),
+		FortiWebUpload:  os.Getenv("TAKTAPLUS_FORTIWEB_UPLOAD_PATH"),
 	}
 	if v := os.Getenv("TAKTAPLUS_FTP_PUBLIC_PORT"); v != "" {
 		p, err := strconv.Atoi(v)

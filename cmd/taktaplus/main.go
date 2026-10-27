@@ -27,6 +27,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/changes"
 	"github.com/farshadfighter/taktaplus/internal/config"
 	"github.com/farshadfighter/taktaplus/internal/deploy"
+	"github.com/farshadfighter/taktaplus/internal/device"
 	"github.com/farshadfighter/taktaplus/internal/fileserver"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
@@ -169,6 +170,9 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		PassiveRange: cfg.FTPPassive, FTPPublic: cfg.FTPPublicPort}, pkgs.OpenFile, log.With("component", "fileserver"))
 	files.Start()
 	defer files.Stop()
+	if cfg.FortiWebUpload != "" {
+		device.FortiWebUploadPath = cfg.FortiWebUpload
+	}
 	installer := deploy.NewInstaller(inv, pkgs, files)
 	firmware := deploy.NewFirmware(installer)
 	scriptSvc := scripts.New(pool, inv)

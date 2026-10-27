@@ -441,3 +441,31 @@ func TestRunScript(t *testing.T) {
 		t.Fatalf("failing script = %v", err)
 	}
 }
+
+func TestFortiWebInstallPackage(t *testing.T) {
+	var got string
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST "+FortiWebUploadPath, func(w http.ResponseWriter, r *http.Request) {
+		f, h, err := r.FormFile("file")
+		if err != nil {
+			w.WriteHeader(400)
+			return
+		}
+		data, _ := io.ReadAll(f)
+		got = h.Filename + ":" + string(data)
+	})
+	ts := httptest.NewTLSServer(mux)
+	defer ts.Close()
+	host, port := hostPort(t, ts.URL)
+	d := New(Config{Kind: KindFortiWeb, Host: host, HTTPSPort: port, APIUser: "admin", APIPass: "pw", PinnedSHA256: certPin(ts)})
+	inst, ok := AsInstaller(d)
+	if !ok {
+		t.Fatal("no installer")
+	}
+	if err := inst.InstallPackage(context.Background(), "waf_signature", "waf.pkg", strings.NewReader("WAF")); err != nil || got != "waf.pkg:WAF" {
+		t.Fatalf("upload = %q %v", got, err)
+	}
+	if err := inst.InstallPackage(context.Background(), "firmware", "fw.out", strings.NewReader("x")); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("firmware = %v", err)
+	}
+}

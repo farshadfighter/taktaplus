@@ -1,9 +1,12 @@
 package device
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"regexp"
 	"sort"
@@ -177,3 +180,44 @@ func (f *fortiWebAPI) Signatures(ctx context.Context) ([]Signature, []Contract, 
 func (f *fortiWebAPI) BackupConfig(context.Context) ([]byte, error) { return nil, ErrUnsupported }
 
 func (f *fortiWebAPI) RestoreConfig(context.Context, []byte) error { return ErrUnsupported }
+
+// FortiWebUploadPath is the REST endpoint the FortiWeb GUI uses to upload a
+// FortiGuard package (System > Maintenance > FortiGuard > upload). It is
+// configurable (TAKTAPLUS_FORTIWEB_UPLOAD_PATH) until verified on devices.
+var FortiWebUploadPath = "/api/v2.0/system/maintenance.manualupdate"
+
+// InstallPackage uploads a signature package the way the GUI does: a
+// multipart form with the file. Firmware images are not uploaded this way.
+func (f *fortiWebAPI) InstallPackage(ctx context.Context, typ, name string, r io.Reader) error {
+	if typ == "firmware" {
+		return ErrUnsupported
+	}
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, err := mw.CreateFormFile("file", name)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(fw, io.LimitReader(r, 4<<30)); err != nil {
+		return err
+	}
+	if err := mw.Close(); err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.rc.base+FortiWebUploadPath, &body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	f.rc.auth(req)
+	resp, err := f.rc.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode/100 != 2 {
+		return HTTPError{Status: resp.StatusCode, Body: string(data)}
+	}
+	return nil
+}
