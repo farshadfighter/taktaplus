@@ -19,7 +19,9 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/farshadfighter/taktaplus-lic/pkg/licformat"
 	"github.com/farshadfighter/taktaplus/internal/alerts"
+
 	"github.com/farshadfighter/taktaplus/internal/api"
 	"github.com/farshadfighter/taktaplus/internal/auth"
 	"github.com/farshadfighter/taktaplus/internal/backup"
@@ -32,8 +34,13 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
+	"github.com/farshadfighter/taktaplus/internal/otp"
 	"github.com/farshadfighter/taktaplus/internal/packages"
+	"github.com/farshadfighter/taktaplus/internal/radiussrv"
 	"github.com/farshadfighter/taktaplus/internal/scripts"
+	"github.com/farshadfighter/taktaplus/internal/settings"
+	"github.com/farshadfighter/taktaplus/internal/sms"
+	"github.com/farshadfighter/taktaplus/internal/smtpgw"
 	"github.com/farshadfighter/taktaplus/internal/store"
 	"github.com/farshadfighter/taktaplus/internal/tlscert"
 	"github.com/farshadfighter/taktaplus/web"
@@ -144,7 +151,18 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	authSvc := auth.NewService(pool, cfg.MasterKey)
 	guard := license.NewGuard(ring, identity)
 	inv := inventory.New(pool, cfg.MasterKey, guard)
-	lic := license.NewManager(guard, pool, log, cfg.LicenseServer, cfg.HostRoot, inv.Usage)
+	store := settings.New(pool, cfg.MasterKey)
+	smsSvc := sms.New(pool, store)
+	otpSvc := otp.New(pool, store, smsSvc, guard)
+	usage := func(ctx context.Context) (*licformat.Usage, error) {
+		u, err := inv.Usage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		u.OTPUsers, err = otpSvc.Usage(ctx)
+		return u, err
+	}
+	lic := license.NewManager(guard, pool, log, cfg.LicenseServer, cfg.HostRoot, usage)
 	if err := lic.Load(ctx); err != nil {
 		return err
 	}
@@ -181,6 +199,27 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	changeSvc.Register(deploy.KindFirmware, firmware)
 	changeSvc.Register(scripts.Kind, scripts.NewRunner(scriptSvc))
 	go changeSvc.Run(ctx)
+	radiusSrv := radiussrv.New(pool, cfg.MasterKey, store, otpSvc, log.With("component", "radius"))
+	if cfg.RadiusListen != "" {
+		go func() {
+			log.Info("radius listening", "addr", cfg.RadiusListen)
+			if err := radiusSrv.Serve(cfg.RadiusListen); err != nil && ctx.Err() == nil {
+				log.Error("radius server stopped", "err", err)
+			}
+		}()
+		defer radiusSrv.Shutdown(context.Background())
+	}
+	gateway := smtpgw.New(pool, store, smsSvc, otpSvc, inv, log.With("component", "smtpgw"))
+	go gateway.Run(ctx)
+	if cfg.SMTPListen != "" {
+		go func() {
+			log.Info("smtp gateway listening", "addr", cfg.SMTPListen)
+			if err := gateway.Serve(cfg.SMTPListen); err != nil && ctx.Err() == nil {
+				log.Error("smtp gateway stopped", "err", err)
+			}
+		}()
+		defer gateway.Close()
+	}
 	tmpDir := filepath.Join(cfg.DataDir, "tmp")
 	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
 		return err
@@ -192,6 +231,7 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 			Log: log, DB: pool, Auth: authSvc, License: lic, UI: web.App(), CookieSecure: cfg.CookieSecure,
 			Inventory: inv, Alerts: alertSvc, Monitor: mon, Backups: backups, Packages: pkgs, TmpDir: tmpDir,
 			Changes: changeSvc, Scripts: scriptSvc, Firmware: firmware,
+			OTP: otpSvc, SMS: smsSvc, Radius: radiusSrv, Gateway: gateway, RadiusAddr: cfg.RadiusListen, SMTPAddr: cfg.SMTPListen,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

@@ -30,6 +30,8 @@ type Config struct {
 	FTPPassive      string         // TAKTAPLUS_FTP_PASSIVE_PORTS, default "30000-30009"
 	FTPPublicPort   int            // TAKTAPLUS_FTP_PUBLIC_PORT: FTP port as devices see it; default the listen port
 	FortiWebUpload  string         // TAKTAPLUS_FORTIWEB_UPLOAD_PATH: FortiWeb API path for signature uploads
+	RadiusListen    string         // TAKTAPLUS_RADIUS_LISTEN, default ":1812" (UDP); "off" disables
+	SMTPListen      string         // TAKTAPLUS_SMTP_LISTEN, default ":2525" (publish as TCP 25); "off" disables
 }
 
 // FromEnv reads the configuration from the process environment.
@@ -50,6 +52,8 @@ func FromEnv() (Config, error) {
 		FilePublicIP:    os.Getenv("TAKTAPLUS_FILESERVER_IP"),
 		FTPPassive:      getenv("TAKTAPLUS_FTP_PASSIVE_PORTS", "30000-30009"),
 		FortiWebUpload:  os.Getenv("TAKTAPLUS_FORTIWEB_UPLOAD_PATH"),
+		RadiusListen:    getenv("TAKTAPLUS_RADIUS_LISTEN", ":1812"),
+		SMTPListen:      getenv("TAKTAPLUS_SMTP_LISTEN", ":2525"),
 	}
 	if v := os.Getenv("TAKTAPLUS_FTP_PUBLIC_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
@@ -57,6 +61,12 @@ func FromEnv() (Config, error) {
 			return c, errors.New("config: TAKTAPLUS_FTP_PUBLIC_PORT must be a port number")
 		}
 		c.FTPPublicPort = p
+	}
+	if c.RadiusListen == "off" {
+		c.RadiusListen = ""
+	}
+	if c.SMTPListen == "off" {
+		c.SMTPListen = ""
 	}
 	if c.TFTPListen == "off" {
 		c.TFTPListen = ""

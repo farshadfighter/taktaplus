@@ -30,6 +30,7 @@ type Fake struct {
 	Scripts      []string
 	ScriptOutput string
 	OnScript     func(f *Fake, script string) (string, error)
+	LocalUsers   []device.LocalUser
 }
 
 func (f *Fake) call(name string) error {
@@ -138,4 +139,14 @@ func (f *Fake) RunScript(_ context.Context, script string) (string, error) {
 		return cb(f, script)
 	}
 	return out, nil
+}
+
+// ListLocalUsers returns LocalUsers.
+func (f *Fake) ListLocalUsers(context.Context) ([]device.LocalUser, error) {
+	if err := f.call("users"); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]device.LocalUser(nil), f.LocalUsers...), nil
 }

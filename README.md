@@ -42,6 +42,8 @@
 | `TAKTAPLUS_TFTP_LISTEN`, `TAKTAPLUS_FTP_LISTEN` | پیش‌فرض `:6969` و `:2121` (در Compose روی 69/udp و 21 منتشر می‌شوند)؛ `off` برای غیرفعال کردن |
 | `TAKTAPLUS_FTP_PASSIVE_PORTS`, `TAKTAPLUS_FTP_PUBLIC_PORT` | بازه‌ی پورت Passive (پیش‌فرض `30000-30009`) و پورت FTP از دید دستگاه |
 
+| `TAKTAPLUS_RADIUS_LISTEN`, `TAKTAPLUS_SMTP_LISTEN` | سرور RADIUS (پیش‌فرض `:1812` UDP) و دروازه‌ی ایمیل‌به‌پیامک (پیش‌فرض `:2525`، در Compose روی 25)؛ `off` برای غیرفعال کردن |
+
 ساخت اولین مدیر: `TAKTAPLUS_ADMIN_PASSWORD=... taktaplus create-admin -username admin`
 
 ### دسترسی روی دستگاه
