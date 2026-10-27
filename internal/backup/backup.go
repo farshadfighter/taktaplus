@@ -32,6 +32,7 @@ const (
 	ReasonManual     = "manual"
 	ReasonPreRestore = "pre_restore"
 	ReasonOnChange   = "on_change"
+	ReasonPreChange  = "pre_change"
 )
 
 // InputError is a validation failure to show to the user.
