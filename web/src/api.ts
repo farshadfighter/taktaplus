@@ -233,7 +233,7 @@ export type Backup = {
   note: string
 }
 
-export type Change = { path: string; kind: 'added' | 'removed' | 'changed'; key: string; old?: string; new?: string }
+export type ConfigChange = { path: string; kind: 'added' | 'removed' | 'changed'; key: string; old?: string; new?: string }
 
 export type Policy = {
   id: number
@@ -292,3 +292,115 @@ export type AuditEntry = {
   object_id: string
   details: Record<string, unknown>
 }
+
+export type RepoPackage = {
+  id: number
+  sha256: string
+  file: string
+  size: number
+  platform: 'fortigate' | 'fortiweb'
+  type: string
+  version: string
+  models: string[]
+  fw_min: string
+  fw_max: string
+  upgrade_from: string[]
+  notes: string
+  released_at: string
+  source_id: number | null
+  origin: string
+  verified: boolean
+  withdrawn: boolean
+  created_at: string
+}
+
+export type SourceConfig = {
+  url?: string
+  host?: string
+  port?: number
+  user?: string
+  password?: string
+  dir?: string
+  tls?: boolean
+  host_key?: string
+  files?: string[]
+}
+
+export type PackageSource = {
+  id: number
+  name: string
+  kind: 'central' | 'http' | 'ftp' | 'sftp' | 'tftp'
+  config: SourceConfig
+  schedule: string
+  enabled: boolean
+  last_sync_at: string | null
+  last_status: string
+  last_error: string
+  next_sync_at: string | null
+}
+
+export type SyncRun = {
+  id: number
+  source_id: number | null
+  origin: string
+  started_at: string
+  finished_at: string | null
+  status: 'running' | 'ok' | 'failed'
+  added: number
+  seen: number
+  error: string
+  actor: string
+}
+
+export type ChangeStatus = 'draft' | 'pending' | 'approved' | 'running' | 'succeeded' | 'failed' | 'partial' | 'cancelled' | 'rejected'
+
+export type Change = {
+  id: number
+  kind: 'signatures' | 'firmware' | 'script'
+  title: string
+  description: string
+  spec: Record<string, unknown>
+  status: ChangeStatus
+  run_mode: 'window' | 'at' | 'now'
+  run_at: string | null
+  urgent_reason: string
+  concurrency: number
+  canary: number
+  max_failures: number
+  backup_first: boolean
+  required_approvals: number
+  created_by: number | null
+  creator: string
+  created_at: string
+  submitted_at: string | null
+  started_at: string | null
+  finished_at: string | null
+  targets: number
+  succeeded_targets: number
+  failed_targets: number
+  approvals: number
+  next_run_at: string | null
+}
+
+export type ChangeTarget = {
+  id: number
+  device_id: number
+  device_name: string
+  position: number
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped'
+  preview: string
+  output: string
+  error: string
+  pre_backup_id: number | null
+  started_at: string | null
+  finished_at: string | null
+}
+
+export type ChangeApproval = { username: string; decision: 'approve' | 'reject'; comment: string; at: string }
+
+export type MaintWindow = { id: number; name: string; group_id: number | null; weekdays: number[]; start_time: string; minutes: number; enabled: boolean }
+export type ApprovalPolicy = { id: number; group_id: number | null; required: number }
+
+export type Script = { id: number; name: string; description: string; platform: string; body: string; read_only: boolean; updated_by: string; updated_at: string }
+export type Variable = { id: number; scope: 'global' | 'group' | 'device'; scope_id: number; name: string; value: string }
+export type ScriptRun = { id: number; script_id: number | null; device_id: number; device_name: string; at: string; actor: string; script: string; output: string; ok: boolean; error: string }

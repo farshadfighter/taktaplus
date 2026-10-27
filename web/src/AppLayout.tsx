@@ -13,7 +13,7 @@ export const roleNames: Record<string, string> = {
   superadmin: 'مدیر ارشد', admin: 'مدیر', approver: 'تأییدکننده', operator: 'اپراتور', viewer: 'مشاهده‌گر',
 }
 
-function NavMenu({ onNavigate, openAlerts }: { onNavigate?: () => void; openAlerts: number }) {
+function NavMenu({ onNavigate, openAlerts, pending }: { onNavigate?: () => void; openAlerts: number; pending: number }) {
   const { user } = useAuth()
   const { pathname } = useLocation()
   const key = '/' + (pathname.split('/')[1] ?? '')
@@ -31,6 +31,17 @@ function NavMenu({ onNavigate, openAlerts }: { onNavigate?: () => void; openAler
         link('/devices', 'تجهیزات'),
         link('/alerts', <span>هشدارها {openAlerts > 0 && <Badge count={openAlerts} size="small" style={{ marginInlineStart: 6 }} />}</span>),
         link('/backups', 'بکاپ و ریستور'),
+      ],
+    },
+    {
+      type: 'group' as const, label: 'بروزرسانی و تغییرات',
+      children: [
+        link('/changes', <span>درخواست‌های تغییر {pending > 0 && <Badge count={pending} size="small" color="gold" style={{ marginInlineStart: 6 }} />}</span>),
+        link('/deploy', 'استقرار سیگنیچر'),
+        link('/firmware', 'ارتقای فرم‌ور'),
+        link('/scripts', 'اسکریپت‌ها'),
+        link('/packages', 'پکیج‌ها و منابع'),
+        link('/maintenance', 'پنجره‌ها و تأیید'),
       ],
     },
     ...(system.length ? [{ type: 'group' as const, label: 'سیستم', children: system }] : []),
@@ -75,19 +86,21 @@ export default function AppLayout() {
   const lic = useFetch<LicenseInfo>(can(user, 'license.read') ? '/license' : null)
   const alerts = useFetch<{ open: Record<string, number> }>('/alerts?state=open&limit=1')
   const openAlerts = Object.values(alerts.data?.open ?? {}).reduce((a, b) => a + b, 0)
+  const changes = useFetch<{ items: unknown[] }>('/changes?status=pending')
+  const pending = changes.data?.items.length ?? 0
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
       {!mobile && (
         <Sider width={240} style={{ borderInlineStart: '1px solid #EEE' }}>
           <Brand />
-          <NavMenu openAlerts={openAlerts} />
+          <NavMenu openAlerts={openAlerts} pending={pending} />
           <LicenseFoot info={lic.data} />
         </Sider>
       )}
       <Drawer open={mobile && open} onClose={() => setOpen(false)} placement="right" size={260} styles={{ body: { padding: 0 } }}>
         <Brand />
-        <NavMenu openAlerts={openAlerts} onNavigate={() => setOpen(false)} />
+        <NavMenu openAlerts={openAlerts} pending={pending} onNavigate={() => setOpen(false)} />
         <LicenseFoot info={lic.data} />
       </Drawer>
       <Layout>

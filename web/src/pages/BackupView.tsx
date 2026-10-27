@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Descriptions, Input, Popconfirm, Select, Space, Spin, Table, Tabs, Tag, Typography, App as AntApp } from 'antd'
 import { Link, useNavigate, useParams } from 'react-router'
-import { api, getText, type Backup, type Change, type RestoreJob } from '../api'
+import { api, getText, type Backup, type ConfigChange, type RestoreJob } from '../api'
 import { useCan } from '../auth'
 import { saveText } from '../download'
 import { faDateTime, faNum } from '../format'
@@ -11,12 +11,12 @@ import { reasonLabel } from './Backups'
 
 const kindTag = (k: string) => (k === 'added' ? <Tag color="green">اضافه</Tag> : k === 'removed' ? <Tag color="red">حذف</Tag> : <Tag color="gold">تغییر</Tag>)
 
-export function ChangeTable({ changes, loading }: { changes: Change[] | null; loading?: boolean }) {
+export function ChangeTable({ changes, loading }: { changes: ConfigChange[] | null; loading?: boolean }) {
   if (loading) return <Spin />
   if (!changes) return null
   if (changes.length === 0) return <Alert type="success" showIcon title="تفاوتی وجود ندارد." />
   return (
-    <Table<Change> rowKey={(c, i) => `${c.path}|${c.key}|${i}`} size="small" dataSource={changes} pagination={{ pageSize: 50, hideOnSinglePage: true }} scroll={{ x: 800 }}
+    <Table<ConfigChange> rowKey={(c, i) => `${c.path}|${c.key}|${i}`} size="small" dataSource={changes} pagination={{ pageSize: 50, hideOnSinglePage: true }} scroll={{ x: 800 }}
       columns={[
         { title: 'نوع', render: (_, c) => kindTag(c.kind), width: 80 },
         { title: 'بلاک', render: (_, c) => <Mono>{c.path || '(سطح بالا)'}</Mono> },
@@ -36,8 +36,8 @@ export default function BackupView() {
   const b = data?.backup
   const siblings = useFetch<{ items: Backup[] }>(b ? `/backups?device=${b.device_id}` : null)
   const [compareTo, setCompareTo] = useState<number | null>(null)
-  const [diff, setDiff] = useState<{ changes: Change[] | null; loading: boolean }>({ changes: null, loading: false })
-  const [preview, setPreview] = useState<{ changes: Change[] | null; loading: boolean; error?: string }>({ changes: null, loading: false })
+  const [diff, setDiff] = useState<{ changes: ConfigChange[] | null; loading: boolean }>({ changes: null, loading: false })
+  const [preview, setPreview] = useState<{ changes: ConfigChange[] | null; loading: boolean; error?: string }>({ changes: null, loading: false })
   const [note, setNote] = useState('')
   const [job, setJob] = useState<RestoreJob | null>(null)
   const reauth = useReauth()
@@ -47,7 +47,7 @@ export default function BackupView() {
     if (!compareTo || !b) return
     const [from, to] = compareTo < b.id ? [compareTo, b.id] : [b.id, compareTo]
     setDiff({ changes: null, loading: true })
-    api.get<{ changes: Change[] }>(`/backups/diff?from=${from}&to=${to}`)
+    api.get<{ changes: ConfigChange[] }>(`/backups/diff?from=${from}&to=${to}`)
       .then((r) => setDiff({ changes: r.changes, loading: false }))
       .catch((e) => { message.error(e.message); setDiff({ changes: null, loading: false }) })
   }, [compareTo, b, message])
@@ -65,7 +65,7 @@ export default function BackupView() {
   const loadPreview = async () => {
     setPreview({ changes: null, loading: true })
     try {
-      const r = await api.get<{ changes: Change[] }>(`/backups/${id}/diff-current`)
+      const r = await api.get<{ changes: ConfigChange[] }>(`/backups/${id}/diff-current`)
       setPreview({ changes: r.changes, loading: false })
     } catch (e) {
       setPreview({ changes: null, loading: false, error: (e as Error).message })

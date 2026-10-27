@@ -13,6 +13,14 @@ import BackupView from './pages/BackupView'
 import License from './pages/License'
 import Users from './pages/Users'
 import Audit from './pages/Audit'
+import Packages from './pages/Packages'
+import Changes from './pages/Changes'
+import ChangeDetail from './pages/ChangeDetail'
+import Deploy from './pages/Deploy'
+import Firmware from './pages/Firmware'
+import Scripts from './pages/Scripts'
+import ScriptEdit from './pages/ScriptEdit'
+import Maintenance from './pages/Maintenance'
 
 function Protected() {
   const { user, loading } = useAuth()
@@ -38,6 +46,14 @@ export default function App() {
           <Route path="license" element={<License />} />
           <Route path="users" element={<Users />} />
           <Route path="audit" element={<Audit />} />
+          <Route path="packages" element={<Packages />} />
+          <Route path="changes" element={<Changes />} />
+          <Route path="changes/:id" element={<ChangeDetail />} />
+          <Route path="deploy" element={<Deploy />} />
+          <Route path="firmware" element={<Firmware />} />
+          <Route path="scripts" element={<Scripts />} />
+          <Route path="scripts/:id" element={<ScriptEdit />} />
+          <Route path="maintenance" element={<Maintenance />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
