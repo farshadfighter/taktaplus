@@ -404,3 +404,27 @@ export type ApprovalPolicy = { id: number; group_id: number | null; required: nu
 export type Script = { id: number; name: string; description: string; platform: string; body: string; read_only: boolean; updated_by: string; updated_at: string }
 export type Variable = { id: number; scope: 'global' | 'group' | 'device'; scope_id: number; name: string; value: string }
 export type ScriptRun = { id: number; script_id: number | null; device_id: number; device_name: string; at: string; actor: string; script: string; output: string; ok: boolean; error: string }
+
+export type OtpUser = { id: number; username: string; name: string; mobile: string; source: 'local' | 'ldap'; fortinet_group: string; active: boolean; locked: boolean; last_login_at: string | null; created_at: string }
+export type OtpPolicy = { length: number; ttl_seconds: number; max_attempts: number; max_sends: number; max_failures: number; lockout_minutes: number }
+export type SmsConfig = { api_key: string; template_id: number; param: string; base_url?: string; low_credit: number }
+export type LdapConfig = { url: string; start_tls: boolean; bind_dn: string; bind_password: string; base_dn: string; user_filter: string; import_filter: string; user_attr: string; mobile_attr: string; name_attr: string }
+export type RadiusConfig = { require_message_authenticator: boolean; message: string }
+export type GatewayConfig = { domain: string; relay_host: string; relay_port: number; relay_security: string; relay_user: string; relay_password: string }
+export type OtpOverview = {
+  capacity: number
+  used: number
+  policy: OtpPolicy
+  sms: SmsConfig
+  sms_configured: boolean
+  ldap: LdapConfig
+  radius: RadiusConfig
+  gateway: GatewayConfig
+  stats: { sent_day: number; failed_day: number; sent_month: number }
+  listen: { radius: string; smtp: string }
+}
+export type RadiusClient = { device_id: number; device_name: string; host: string; source_ip: string; enabled: boolean; has_secret: boolean }
+export type DirectoryUser = { username: string; name: string; mobile: string; exists: boolean; valid: boolean }
+export type GatewayUser = { device_id: number; device_name: string; username: string; mobile: string; seen_at: string }
+export type SmsMessage = { id: number; at: string; mobile: string; purpose: string; username: string; device_id: number | null; status: 'sent' | 'failed' | 'blocked'; provider_id: string; error: string }
+export type OtpEvent = { id: number; at: string; username: string; device_id: number | null; client_ip: string; event: string; detail: string }
