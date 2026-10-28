@@ -9,7 +9,7 @@ import { useFetch } from '../useFetch'
 
 export const typeLabel: Record<string, string> = {
   ips_db: 'پایگاه IPS', ips_engine: 'موتور IPS', av_db: 'پایگاه آنتی‌ویروس', av_engine: 'موتور آنتی‌ویروس', appctrl_db: 'کنترل برنامه',
-  botnet_db: 'Botnet', isdb: 'Internet Service DB', ot_db: 'OT', waf_signature: 'امضای WAF', ip_reputation: 'اعتبار IP', geo_db: 'Geo IP', firmware: 'فرم‌ور',
+  botnet_db: 'Botnet', isdb: 'Internet Service DB', ot_db: 'OT', waf_signature: 'امضای WAF', ip_reputation: 'اعتبار IP', geo_db: 'Geo IP', firmware: 'فرم‌ور', geoip_mmdb: 'پایگاه کشورها (TaktaPlus)',
 }
 const types: Record<string, string[]> = {
   fortigate: ['ips_db', 'ips_engine', 'av_db', 'av_engine', 'appctrl_db', 'botnet_db', 'isdb', 'ot_db', 'firmware'],

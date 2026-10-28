@@ -23,6 +23,10 @@ import ScriptEdit from './pages/ScriptEdit'
 import Maintenance from './pages/Maintenance'
 import OtpUsers from './pages/OtpUsers'
 import OtpSettings from './pages/OtpSettings'
+import Analytics from './pages/Analytics'
+import LogView from './pages/LogView'
+import Reports from './pages/Reports'
+import LogSettings from './pages/LogSettings'
 
 function Protected() {
   const { user, loading } = useAuth()
@@ -58,6 +62,10 @@ export default function App() {
           <Route path="maintenance" element={<Maintenance />} />
           <Route path="otp/users" element={<OtpUsers />} />
           <Route path="otp/settings" element={<OtpSettings />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="logs" element={<LogView />} />
+          <Route path="logs/settings" element={<LogSettings />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

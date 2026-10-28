@@ -17,7 +17,7 @@ function NavMenu({ onNavigate, openAlerts, pending }: { onNavigate?: () => void;
   const { user } = useAuth()
   const { pathname } = useLocation()
   const parts = pathname.split('/')
-  const key = parts[1] === 'otp' ? `/otp/${parts[2] ?? ''}` : '/' + (parts[1] ?? '')
+  const key = parts[1] === 'otp' ? `/otp/${parts[2] ?? ''}` : parts[1] === 'logs' && parts[2] === 'settings' ? '/logs/settings' : '/' + (parts[1] ?? '')
   const link = (to: string, label: React.ReactNode) => ({ key: to, label: <Link to={to} onClick={onNavigate}>{label}</Link> })
   const system = [
     ...(can(user, 'users.manage') ? [link('/users', 'کاربران پنل')] : []),
@@ -45,6 +45,15 @@ function NavMenu({ onNavigate, openAlerts, pending }: { onNavigate?: () => void;
         link('/maintenance', 'پنجره‌ها و تأیید'),
       ],
     },
+    ...(can(user, 'logs.read') ? [{
+      type: 'group' as const, label: 'گزارش‌ها و تحلیل لاگ',
+      children: [
+        link('/analytics', 'تحلیل امنیتی'),
+        link('/logs', 'نمایشگر لاگ'),
+        link('/reports', 'گزارش‌ها'),
+        ...(can(user, 'logs.manage') ? [link('/logs/settings', 'تنظیمات لاگ')] : []),
+      ],
+    }] : []),
     {
       type: 'group' as const, label: 'احراز هویت دو مرحله‌ای',
       children: [link('/otp/users', 'کاربران پیامکی'), link('/otp/settings', 'تنظیمات و گزارش')],

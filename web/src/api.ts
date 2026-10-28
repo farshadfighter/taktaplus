@@ -428,3 +428,80 @@ export type DirectoryUser = { username: string; name: string; mobile: string; ex
 export type GatewayUser = { device_id: number; device_name: string; username: string; mobile: string; seen_at: string }
 export type SmsMessage = { id: number; at: string; mobile: string; purpose: string; username: string; device_id: number | null; status: 'sent' | 'failed' | 'blocked'; provider_id: string; error: string }
 export type OtpEvent = { id: number; at: string; username: string; device_id: number | null; client_ip: string; event: string; detail: string }
+
+// --- logs and reports (module E) ---
+
+export type LogColumn = { key: string; title: string; type: 'text' | 'number' | 'bytes' | 'duration' | 'ip' | 'country' | 'severity' | 'action' | 'device' }
+export type LogDrill = { type: string; field: string; key: string }
+export type LogWidget = {
+  id: string
+  title: string
+  kind: 'kpis' | 'series' | 'bars' | 'table'
+  group: string
+  columns: LogColumn[]
+  drill?: LogDrill
+  rows?: Record<string, string | number>[]
+}
+export type LogView = { id: string; title: string; columns: LogColumn[] }
+export type LogCatalog = { widgets: LogWidget[]; tabs: Record<string, string[]>; views: LogView[] }
+export type LogFilter = { field: string; op: 'eq' | 'ne' | 'contains'; value: string }
+export type LogRecord = Record<string, unknown> & { ts: string; device_id: number; fields: Record<string, string> }
+export type LogSearchResult = { records: LogRecord[]; total: number; capped: boolean; took_ms: number }
+export type Retention = { raw_days: number; rollup_days: number }
+export type LogSettings = { retention: Retention; trusted_sources: string[] }
+export type CollectorStats = {
+  received: number
+  accepted: number
+  dropped: Record<string, number>
+  eps: number
+  buffered: number
+  last_error: string
+  devices: { device_id: number; name: string; count: number; last_at: string; source_ip: string }[]
+  rejected: { serial: string; ip: string; reason: string; count: number; last_at: string }[]
+  listeners: Record<string, string>
+}
+export type GeoInfo = { loaded: boolean; type: string; built_at: string | null; source: string; updated_at: string | null }
+export type LogStatus = {
+  enabled: boolean
+  settings: LogSettings
+  geoip: GeoInfo
+  syslog_server: string
+  stats?: CollectorStats
+  usage?: { table: string; rows: number; bytes: number; oldest: string }[] | null
+  store_error?: string
+}
+
+export type ReportTemplate = { id: number; name: string; description: string; widgets: string[]; builtin: boolean; updated_by: string; updated_at: string }
+export type ReportSchedule = {
+  id: number
+  template_id: number
+  template: string
+  frequency: 'daily' | 'weekly' | 'monthly'
+  weekday: number
+  monthday: number
+  at_minute: number
+  device_ids: number[]
+  group_id: number | null
+  formats: string[]
+  channel_id: number | null
+  recipients: string[]
+  enabled: boolean
+  next_run_at: string
+  created_by: string
+}
+export type ReportRun = {
+  id: number
+  template_id: number | null
+  schedule_id: number | null
+  title: string
+  period_from: string
+  period_to: string
+  device_ids: number[]
+  formats: string[]
+  status: 'running' | 'ready' | 'sent' | 'failed'
+  error: string
+  files: { format: string; name: string; size: number }[]
+  created_by: string
+  created_at: string
+  finished_at: string | null
+}
