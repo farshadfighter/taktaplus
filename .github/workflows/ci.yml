@@ -21,8 +21,18 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U ci" --health-interval 5s --health-retries 10
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.8-alpine
+        env:
+          CLICKHOUSE_USER: ci
+          CLICKHOUSE_PASSWORD: ci
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+        ports: ["8123:8123"]
+        options: >-
+          --health-cmd "wget -qO- http://127.0.0.1:8123/ping || exit 1" --health-interval 5s --health-retries 20
     env:
       TAKTAPLUS_TEST_DATABASE_URL: postgres://ci:ci@localhost:5432/ci?sslmode=disable
+      TAKTAPLUS_TEST_CLICKHOUSE_URL: http://ci:ci@localhost:8123/default
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

@@ -30,20 +30,25 @@ const (
 	PermUsersManage   Perm = "users.manage"
 	PermAuditRead     Perm = "audit.read"
 	PermSettings      Perm = "settings.manage"
+	PermLogsRead      Perm = "logs.read"      // dashboards, log viewer, generated reports
+	PermLogsManage    Perm = "logs.manage"    // log storage, sources and the country database
+	PermReports       Perm = "reports.manage" // report templates and schedules
 )
 
 var rolePerms = map[Role][]Perm{
 	RoleSuperAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
 		PermChangeApprove, PermLicenseRead, PermLicenseManage, PermUsersManage, PermAuditRead, PermSettings, PermPackages, PermChangeCreate, PermOTP,
+		PermLogsRead, PermLogsManage, PermReports,
 	},
 	RoleAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
 		PermChangeApprove, PermLicenseRead, PermAuditRead, PermPackages, PermChangeCreate, PermOTP,
+		PermLogsRead, PermLogsManage, PermReports,
 	},
 	RoleApprover: {PermDevicesRead, PermChangeApprove, PermLicenseRead, PermAuditRead},
-	RoleOperator: {PermDevicesRead, PermBackupsRun, PermLicenseRead, PermChangeCreate},
-	RoleViewer:   {PermDevicesRead, PermLicenseRead},
+	RoleOperator: {PermDevicesRead, PermBackupsRun, PermLicenseRead, PermChangeCreate, PermLogsRead},
+	RoleViewer:   {PermDevicesRead, PermLicenseRead, PermLogsRead},
 }
 
 // Valid reports whether r is a known role.

@@ -32,6 +32,12 @@ type Config struct {
 	FortiWebUpload  string         // TAKTAPLUS_FORTIWEB_UPLOAD_PATH: FortiWeb API path for signature uploads
 	RadiusListen    string         // TAKTAPLUS_RADIUS_LISTEN, default ":1812" (UDP); "off" disables
 	SMTPListen      string         // TAKTAPLUS_SMTP_LISTEN, default ":2525" (publish as TCP 25); "off" disables
+	ClickHouseURL   string         // TAKTAPLUS_CLICKHOUSE_URL, e.g. http://user:pass@clickhouse:8123/taktaplus; empty disables logs
+	SyslogUDP       string         // TAKTAPLUS_SYSLOG_UDP, default ":5514" (publish as UDP 514); "off" disables
+	SyslogTCP       string         // TAKTAPLUS_SYSLOG_TCP, default ":5514" (publish as TCP 514); "off" disables
+	SyslogTLS       string         // TAKTAPLUS_SYSLOG_TLS, default ":6514"; "off" disables
+	Chromium        string         // TAKTAPLUS_CHROMIUM: browser that prints PDF reports; empty = look for chromium on PATH
+	TimeZone        *time.Location // TAKTAPLUS_TIMEZONE, default Asia/Tehran: report schedules and dates
 }
 
 // FromEnv reads the configuration from the process environment.
@@ -54,6 +60,11 @@ func FromEnv() (Config, error) {
 		FortiWebUpload:  os.Getenv("TAKTAPLUS_FORTIWEB_UPLOAD_PATH"),
 		RadiusListen:    getenv("TAKTAPLUS_RADIUS_LISTEN", ":1812"),
 		SMTPListen:      getenv("TAKTAPLUS_SMTP_LISTEN", ":2525"),
+		ClickHouseURL:   os.Getenv("TAKTAPLUS_CLICKHOUSE_URL"),
+		SyslogUDP:       getenv("TAKTAPLUS_SYSLOG_UDP", ":5514"),
+		SyslogTCP:       getenv("TAKTAPLUS_SYSLOG_TCP", ":5514"),
+		SyslogTLS:       getenv("TAKTAPLUS_SYSLOG_TLS", ":6514"),
+		Chromium:        os.Getenv("TAKTAPLUS_CHROMIUM"),
 	}
 	if v := os.Getenv("TAKTAPLUS_FTP_PUBLIC_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
@@ -74,6 +85,11 @@ func FromEnv() (Config, error) {
 	if c.FTPListen == "off" {
 		c.FTPListen = ""
 	}
+	for _, v := range []*string{&c.SyslogUDP, &c.SyslogTCP, &c.SyslogTLS} {
+		if *v == "off" {
+			*v = ""
+		}
+	}
 	if c.TLS != "on" && c.TLS != "off" {
 		return c, errors.New("config: TAKTAPLUS_TLS must be on or off")
 	}
@@ -88,6 +104,11 @@ func FromEnv() (Config, error) {
 		}
 		c.ShutdownTimeout = d
 	}
+	tz, err := time.LoadLocation(getenv("TAKTAPLUS_TIMEZONE", "Asia/Tehran"))
+	if err != nil {
+		return c, errors.New("config: TAKTAPLUS_TIMEZONE must be a time zone name such as Asia/Tehran")
+	}
+	c.TimeZone = tz
 	if c.DatabaseURL == "" {
 		return c, errors.New("config: TAKTAPLUS_DATABASE_URL is required")
 	}

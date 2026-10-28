@@ -6,15 +6,18 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/mail"
 	"net/smtp"
+	"net/textproto"
 	"net/url"
 	"os"
 	"strconv"
@@ -146,6 +149,18 @@ func send(ctx context.Context, kind string, c ChannelConfig, m Message) error {
 }
 
 func sendEmail(ctx context.Context, c ChannelConfig, m Message) error {
+	return sendMail(ctx, c, c.To, m.subject(), m.body(), nil, m.At)
+}
+
+// Attachment is a file sent with an email.
+type Attachment struct {
+	Name        string
+	ContentType string
+	Data        []byte
+}
+
+// sendMail delivers a UTF-8 text message, with attachments if any.
+func sendMail(ctx context.Context, c ChannelConfig, recipients []string, subject, body string, files []Attachment, at time.Time) error {
 	addr := net.JoinHostPort(c.SMTPHost, strconv.Itoa(c.SMTPPort))
 	dialer := &net.Dialer{Timeout: 15 * time.Second}
 	var conn net.Conn
@@ -182,8 +197,11 @@ func sendEmail(ctx context.Context, c ChannelConfig, m Message) error {
 		return err
 	}
 	var to []string
-	for _, t := range c.To {
-		a, _ := mail.ParseAddress(t)
+	for _, t := range recipients {
+		a, err := mail.ParseAddress(t)
+		if err != nil {
+			return fmt.Errorf("recipient %q is not valid", t)
+		}
 		if err := client.Rcpt(a.Address); err != nil {
 			return err
 		}
@@ -194,9 +212,32 @@ func sendEmail(ctx context.Context, c ChannelConfig, m Message) error {
 		return err
 	}
 	var msg bytes.Buffer
-	fmt.Fprintf(&msg, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n",
-		from.String(), strings.Join(to, ", "), mime.QEncoding.Encode("utf-8", m.subject()), m.At.Format(time.RFC1123Z))
-	msg.WriteString(strings.ReplaceAll(m.body(), "\n", "\r\n"))
+	fmt.Fprintf(&msg, "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\n",
+		from.String(), strings.Join(to, ", "), mime.QEncoding.Encode("utf-8", subject), at.Format(time.RFC1123Z))
+	text := strings.ReplaceAll(body, "\n", "\r\n")
+	if len(files) == 0 {
+		msg.WriteString("Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n")
+		msg.WriteString(text)
+	} else {
+		mw := multipart.NewWriter(&msg)
+		fmt.Fprintf(&msg, "Content-Type: multipart/mixed; boundary=%s\r\n\r\n", mw.Boundary())
+		part, _ := mw.CreatePart(textproto.MIMEHeader{"Content-Type": {"text/plain; charset=utf-8"}, "Content-Transfer-Encoding": {"8bit"}})
+		_, _ = part.Write([]byte(text))
+		for _, f := range files {
+			h := textproto.MIMEHeader{}
+			h.Set("Content-Type", f.ContentType)
+			h.Set("Content-Transfer-Encoding", "base64")
+			h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": f.Name}))
+			part, _ := mw.CreatePart(h)
+			enc := base64.StdEncoding.EncodeToString(f.Data)
+			for len(enc) > 76 {
+				_, _ = part.Write([]byte(enc[:76] + "\r\n"))
+				enc = enc[76:]
+			}
+			_, _ = part.Write([]byte(enc + "\r\n"))
+		}
+		_ = mw.Close()
+	}
 	if _, err := w.Write(msg.Bytes()); err != nil {
 		return err
 	}
