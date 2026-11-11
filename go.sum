@@ -9,10 +9,8 @@ github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 h1:oP4q0fw+fOSWn3
 github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6/go.mod h1:iL2twTeMvZnrg54ZoPDNfJaJaqy0xIQFuBdrLsmspwQ=
 github.com/emersion/go-smtp v0.25.0 h1:krfiHrme2JbJYDh0DGuSRbvPpbnQTH/v9CIfPincl1I=
 github.com/emersion/go-smtp v0.25.0/go.mod h1:ZtRRkbTyp2XTHCA+BmyTFTrj8xY4I+b4McvHxCU2gsQ=
-github.com/farshadfighter/taktaplus-lic v0.0.0-20261111223316-2153ac055539 h1:5MjNXJqJJ6t0a5GUnn+xJ4fQE/p74QyNEimiwWXQGyE=
-github.com/farshadfighter/taktaplus-lic v0.0.0-20261111223316-2153ac055539/go.mod h1:SDR0G4QEizpmQXlNpxQM/J4Aao4FSLKGT5xSs/+Ktz8=
-github.com/farshadfighter/taktaplus-lic v0.0.0-20261111223542-c547b2741d8d h1:UQLfh+ibiK3tOY3MXyciC82lmqVHNDmfrOCdLs8f7qE=
-github.com/farshadfighter/taktaplus-lic v0.0.0-20261111223542-c547b2741d8d/go.mod h1:SDR0G4QEizpmQXlNpxQM/J4Aao4FSLKGT5xSs/+Ktz8=
+github.com/farshadfighter/taktaplus-lic v0.0.0-20261111230456-6ed308ebd032 h1:o+Bzji0bUBVmTgkbbuKgV8hpa6Z/F17qhH3bbPhAoAA=
+github.com/farshadfighter/taktaplus-lic v0.0.0-20261111230456-6ed308ebd032/go.mod h1:uKCcbQ0j97/3B8N4Cgi7gcAP9PHVdQM1+SbHvQIwlWU=
 github.com/go-asn1-ber/asn1-ber v1.5.8 h1:H9AZkK22UOmfX8J84ubyaZxKJZ3FMHVwn8swoMML7iQ=
 github.com/go-asn1-ber/asn1-ber v1.5.8/go.mod h1:hEBeB/ic+5LoWskz+yKT7vGhhPYkProFKoKdwZRWMe0=
 github.com/go-chi/chi/v5 v5.5.0 h1:xdKQ1dJmVJsmgahrXSKhUx8NyVPzpwdlyrrQFpMPJgg=
