@@ -50,6 +50,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/sms"
 	"github.com/farshadfighter/taktaplus/internal/smtpgw"
 	"github.com/farshadfighter/taktaplus/internal/store"
+	"github.com/farshadfighter/taktaplus/internal/system"
 	"github.com/farshadfighter/taktaplus/internal/tlscert"
 	"github.com/farshadfighter/taktaplus/web"
 )
@@ -60,18 +61,24 @@ type service struct {
 	run     func(ctx context.Context, cfg config.Config, log *slog.Logger) error
 }
 
-var order = []string{"api", "migrate", "create-admin", "worker", "fileserver", "radius", "smtpgw", "collector", "version"}
+var order = []string{"api", "migrate", "create-admin", "system-backup", "restore-backup", "stage-upgrade", "verify-bundle-dir", "upgrade-snapshot", "upgrade-rollback", "worker", "fileserver", "radius", "smtpgw", "collector", "version"}
 
 var services = map[string]service{
-	"api":          {summary: "web UI and REST API", run: runAPI},
-	"migrate":      {summary: "apply database migrations and exit", run: runMigrate},
-	"create-admin": {summary: "create a superadmin: create-admin -username U [-name N]", run: runCreateAdmin},
-	"worker":       {summary: "background jobs and schedules (runs inside api)", inAPI: true},
-	"fileserver":   {summary: "built-in TFTP/FTP server (runs inside api)", inAPI: true},
-	"radius":       {summary: "RADIUS server for SMS two-factor (runs inside api)", inAPI: true},
-	"smtpgw":       {summary: "email-to-SMS gateway (runs inside api)", inAPI: true},
-	"collector":    {summary: "syslog collector (runs inside api)", inAPI: true},
-	"version":      {summary: "print the version"},
+	"api":               {summary: "web UI and REST API", run: runAPI},
+	"migrate":           {summary: "apply database migrations and exit", run: runMigrate},
+	"create-admin":      {summary: "create a superadmin: create-admin -username U [-name N]", run: runCreateAdmin},
+	"system-backup":     {summary: "take an encrypted backup of TaktaPlus with the stored key", run: runSystemBackup},
+	"restore-backup":    {summary: "restore a .tpbak backup: restore-backup -file F [-master-key-out P]", run: runRestoreBackup},
+	"stage-upgrade":     {summary: "verify an upgrade bundle and queue it for the updater", run: runStageUpgrade},
+	"verify-bundle-dir": {summary: "verify an extracted bundle against its signed manifest", run: runVerifyBundleDir},
+	"upgrade-snapshot":  {summary: "dump the database before an upgrade", run: runUpgradeSnapshot},
+	"upgrade-rollback":  {summary: "restore the database dumped by upgrade-snapshot", run: runUpgradeRollback},
+	"worker":            {summary: "background jobs and schedules (runs inside api)", inAPI: true},
+	"fileserver":        {summary: "built-in TFTP/FTP server (runs inside api)", inAPI: true},
+	"radius":            {summary: "RADIUS server for SMS two-factor (runs inside api)", inAPI: true},
+	"smtpgw":            {summary: "email-to-SMS gateway (runs inside api)", inAPI: true},
+	"collector":         {summary: "syslog collector (runs inside api)", inAPI: true},
+	"version":           {summary: "print the version"},
 }
 
 func usage() {
@@ -96,6 +103,13 @@ func main() {
 	}
 	if name == "version" {
 		fmt.Println(buildinfo.String())
+		return
+	}
+	if name == "verify-bundle-dir" {
+		if err := runVerifyBundleDir(context.Background(), config.Config{}, nil); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		return
 	}
 	if svc.inAPI {
@@ -292,6 +306,19 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		return err
 	}
 	go reportSvc.Scheduler(ctx)
+	releaseKeys, err := system.TrustedKeys()
+	if err != nil {
+		return err
+	}
+	systemSvc := system.New(pool, store, releaseKeys, system.Options{DataDir: cfg.DataDir, DatabaseURL: cfg.DatabaseURL,
+		MasterKey: os.Getenv("TAKTAPLUS_MASTER_KEY"), PgDump: cfg.PgDump}, log.With("component", "system"))
+	systemSvc.SetNotifier(func(ctx context.Context, ch int64, to []string, subject, body string) error {
+		return alertSvc.Deliver(ctx, ch, to, subject, body, nil)
+	})
+	if err := systemSvc.Recover(ctx); err != nil {
+		return err
+	}
+	go systemSvc.Scheduler(ctx)
 
 	srv := &http.Server{
 		Addr: cfg.Listen,
@@ -300,7 +327,7 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 			Inventory: inv, Alerts: alertSvc, Monitor: mon, Backups: backups, Packages: pkgs, TmpDir: tmpDir,
 			Changes: changeSvc, Scripts: scriptSvc, Firmware: firmware,
 			OTP: otpSvc, SMS: smsSvc, Radius: radiusSrv, Gateway: gateway, RadiusAddr: cfg.RadiusListen, SMTPAddr: cfg.SMTPListen,
-			Logs: logSvc, Reports: reportSvc, SyslogServer: cfg.FilePublicIP, Compliance: complianceSvc, Policy: policySvc,
+			Logs: logSvc, Reports: reportSvc, SyslogServer: cfg.FilePublicIP, Compliance: complianceSvc, Policy: policySvc, System: systemSvc,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

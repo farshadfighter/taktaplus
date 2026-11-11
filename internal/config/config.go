@@ -37,6 +37,8 @@ type Config struct {
 	SyslogTCP       string         // TAKTAPLUS_SYSLOG_TCP, default ":5514" (publish as TCP 514); "off" disables
 	SyslogTLS       string         // TAKTAPLUS_SYSLOG_TLS, default ":6514"; "off" disables
 	Chromium        string         // TAKTAPLUS_CHROMIUM: browser that prints PDF reports; empty = look for chromium on PATH
+	PgDump          string         // TAKTAPLUS_PG_DUMP and TAKTAPLUS_PG_RESTORE: PostgreSQL client tools for self-backups
+	PgRestore       string
 	TimeZone        *time.Location // TAKTAPLUS_TIMEZONE, default Asia/Tehran: report schedules and dates
 }
 
@@ -65,6 +67,8 @@ func FromEnv() (Config, error) {
 		SyslogTCP:       getenv("TAKTAPLUS_SYSLOG_TCP", ":5514"),
 		SyslogTLS:       getenv("TAKTAPLUS_SYSLOG_TLS", ":6514"),
 		Chromium:        os.Getenv("TAKTAPLUS_CHROMIUM"),
+		PgDump:          getenv("TAKTAPLUS_PG_DUMP", "pg_dump"),
+		PgRestore:       getenv("TAKTAPLUS_PG_RESTORE", "pg_restore"),
 	}
 	if v := os.Getenv("TAKTAPLUS_FTP_PUBLIC_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
