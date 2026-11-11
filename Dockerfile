@@ -21,9 +21,10 @@ RUN LDFLAGS="-s -w -X github.com/farshadfighter/taktaplus/internal/buildinfo.Ver
     mkdir -p /data-skel
 
 # Alpine rather than distroless: PDF reports are printed with headless
-# Chromium, which needs its shared libraries and fonts.
+# Chromium, which needs its shared libraries and fonts; self-backups use the
+# PostgreSQL client tools.
 FROM alpine:3.20
-RUN apk add --no-cache chromium ca-certificates && \
+RUN apk add --no-cache chromium ca-certificates postgresql16-client && \
     addgroup -S -g 65532 nonroot && adduser -S -D -H -u 65532 -G nonroot nonroot
 COPY --from=build /out/ /usr/local/bin/
 # Owned by the "nonroot" user so a fresh named volume is writable.

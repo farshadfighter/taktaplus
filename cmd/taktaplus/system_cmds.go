@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/farshadfighter/taktaplus-lic/pkg/manifest"
 	"github.com/farshadfighter/taktaplus-lic/pkg/release"
 	"github.com/farshadfighter/taktaplus-lic/pkg/selfbackup"
 
@@ -104,6 +105,9 @@ func runRestoreBackup(ctx context.Context, cfg config.Config, log *slog.Logger) 
 	if h.Product != release.ProductApp {
 		return fmt.Errorf("this is a backup of %s, not TaktaPlus", h.Product)
 	}
+	if buildinfo.Version != "dev" && manifest.CompareVersions(h.Version, buildinfo.Version) > 0 {
+		return fmt.Errorf("the backup was made by version %s; install that version or newer before restoring", h.Version)
+	}
 	log.Info("restoring", "version", h.Version, "created_at", h.CreatedAt, "host", h.Hostname)
 	extra, err := selfbackup.Restore(ctx, r, selfbackup.Options{DatabaseURL: cfg.DatabaseURL, PgRestore: cfg.PgRestore,
 		DataDir: cfg.DataDir, Exclude: system.Excluded})
@@ -150,7 +154,12 @@ func runStageUpgrade(ctx context.Context, cfg config.Config, log *slog.Logger) e
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "verified %s %s (installed %s)\n", release.ProductApp, u.Version, buildinfo.Version)
-	fmt.Println(dir)
+	rel, err := filepath.Rel(cfg.DataDir, dir)
+	if err != nil {
+		return err
+	}
+	// "<id> <version> <directory relative to the data directory>" for upgrade.sh
+	fmt.Printf("%d %s %s\n", u.ID, u.Version, filepath.ToSlash(rel))
 	return nil
 }
 

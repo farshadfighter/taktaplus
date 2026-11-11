@@ -131,7 +131,7 @@ func TestStage(t *testing.T) {
 		t.Fatal("queued two upgrades")
 	}
 	// Status from the updater.
-	_ = os.WriteFile(filepath.Join(dir, UpgradeDir, "status.json"), []byte(`{"id":`+itoa(u.ID)+`,"state":"running","step":"load","message":"loading images"}`), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, UpgradeDir, "status-"+itoa(u.ID)+".json"), []byte(`{"id":`+itoa(u.ID)+`,"state":"running","step":"load","message":"loading images"}`), 0o600)
 	_ = os.WriteFile(filepath.Join(dir, UpgradeDir, "upgrade-"+itoa(u.ID)+".log"), []byte("docker load\n"), 0o600)
 	list, err := svc.Upgrades(ctx)
 	if err != nil || len(list) != 1 || list[0].Status != "running" || list[0].Step != "load" || list[0].Log != "docker load\n" {

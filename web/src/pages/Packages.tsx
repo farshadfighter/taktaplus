@@ -6,6 +6,7 @@ import { api, type PackageSource, type RepoPackage, type SyncRun } from '../api'
 import { useCan } from '../auth'
 import { faDate, faDateTime, faNum } from '../format'
 import { Mono, PageHeader, bytesText } from '../ui'
+import { upload } from '../upload'
 import { useFetch } from '../useFetch'
 
 export const typeLabel: Record<string, string> = {
@@ -17,27 +18,6 @@ const types: Record<string, string[]> = {
   fortiweb: ['waf_signature', 'av_db', 'ip_reputation', 'geo_db', 'firmware'],
 }
 const sourceKinds: Record<string, string> = { central: 'مخزن مرکزی تکتاپلاس', http: 'آینه‌ی HTTP(S)', ftp: 'FTP', sftp: 'SFTP', tftp: 'TFTP' }
-
-// upload sends a file with optional JSON meta and reports progress.
-function upload(path: string, file: File, meta: object | null, onProgress: (p: number) => void): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const body = new FormData()
-    if (meta) body.append('meta', JSON.stringify(meta))
-    body.append('file', file)
-    const xhr = new XMLHttpRequest()
-    xhr.open('POST', '/api/v1' + path)
-    xhr.setRequestHeader('X-Requested-With', 'taktaplus')
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100))
-    xhr.onload = () => {
-      let data: { error?: string } = {}
-      try { data = JSON.parse(xhr.responseText) } catch { /* not JSON */ }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(data)
-      else reject(new Error(data.error ?? xhr.statusText))
-    }
-    xhr.onerror = () => reject(new Error('ارسال فایل ناموفق بود'))
-    xhr.send(body)
-  })
-}
 
 function EditPackage({ pkg, onClose }: { pkg: RepoPackage | null; onClose: (saved: boolean) => void }) {
   const [form] = Form.useForm()

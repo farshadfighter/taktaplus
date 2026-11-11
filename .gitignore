@@ -16,3 +16,4 @@
 .DS_Store
 /web/*.tsbuildinfo
 /.data/
+/dist/

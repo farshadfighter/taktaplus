@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -305,9 +306,20 @@ func (s *Service) Runs(ctx context.Context) ([]Run, error) {
 		return nil, err
 	}
 	files, _ := selfbackup.List(s.backupDir(), filePrefix)
+	known := map[string]bool{}
 	for i := range out {
 		out[i].Available = slices.ContainsFunc(files, func(f selfbackup.FileInfo) bool { return f.Name == out[i].File })
+		known[out[i].File] = true
 	}
+	// Files the database does not know, e.g. made after the point a restore
+	// or an upgrade rollback returned to.
+	for _, f := range files {
+		if !known[f.Name] {
+			t := f.ModTime
+			out = append(out, Run{Trigger: "file", Status: "ok", StartedAt: t, FinishedAt: &t, File: f.Name, Size: f.Size, Available: true})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].StartedAt.After(out[j].StartedAt) })
 	return out, nil
 }
 
@@ -432,7 +444,7 @@ func (s *Service) alert(ctx context.Context, st Settings, subject, detail string
 
 // Recover marks runs interrupted by a restart as failed.
 func (s *Service) Recover(ctx context.Context) error {
-	_, err := s.db.Exec(ctx, `UPDATE system_backups SET status = 'failed', error = 'interrupted by a restart', finished_at = now() WHERE status = 'running'`)
+	_, err := s.db.Exec(ctx, `UPDATE system_backups SET status = 'failed', error = 'interrupted by a restart or restore', finished_at = now() WHERE status = 'running'`)
 	return err
 }
 
@@ -531,7 +543,11 @@ func (s *Service) Stage(ctx context.Context, r io.Reader, by string, queue bool)
 		os.RemoveAll(tmp)
 		return nil, "", err
 	}
-	rel := "staged-" + strconv.FormatInt(u.ID, 10)
+	// IDs can repeat after a restore: drop what an older upgrade left.
+	idText := strconv.FormatInt(u.ID, 10)
+	_ = os.Remove(filepath.Join(s.upgradeDir(), "status-"+idText+".json"))
+	_ = os.Remove(filepath.Join(s.upgradeDir(), "upgrade-"+idText+".log"))
+	rel := "staged-" + idText
 	dir := filepath.Join(s.upgradeDir(), rel)
 	_ = os.RemoveAll(dir)
 	if err := os.Rename(tmp, dir); err != nil {
@@ -569,26 +585,30 @@ func (s *Service) Cancel(ctx context.Context, id int64) error {
 	return err
 }
 
-// syncUpgrade copies the updater's status into the upgrade's row.
+// syncUpgrade copies the updater's status files (status-<id>.json, one per
+// upgrade, so a database rollback cannot lose an attempt) into the rows.
 func (s *Service) syncUpgrade(ctx context.Context) {
-	data, err := os.ReadFile(filepath.Join(s.upgradeDir(), "status.json"))
-	if err != nil {
-		return
-	}
-	var st status
-	if json.Unmarshal(data, &st) != nil || st.ID == 0 {
-		return
-	}
-	logText, _ := os.ReadFile(filepath.Join(s.upgradeDir(), "upgrade-"+strconv.FormatInt(st.ID, 10)+".log"))
-	if len(logText) > 64<<10 {
-		logText = logText[len(logText)-64<<10:]
-	}
-	finished := st.State == "done" || st.State == "failed" || st.State == "rolled_back"
-	_, err = s.db.Exec(ctx, `UPDATE system_upgrades SET status = $2, step = $3, message = $4, log = $5,
-		finished_at = CASE WHEN $6 THEN coalesce(finished_at, now()) ELSE NULL END WHERE id = $1`,
-		st.ID, st.State, st.Step, st.Message, string(logText), finished)
-	if err != nil {
-		s.log.Warn("upgrade status", "err", err)
+	files, _ := filepath.Glob(filepath.Join(s.upgradeDir(), "status-*.json"))
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		var st status
+		if json.Unmarshal(data, &st) != nil || st.ID == 0 {
+			continue
+		}
+		logText, _ := os.ReadFile(filepath.Join(s.upgradeDir(), "upgrade-"+strconv.FormatInt(st.ID, 10)+".log"))
+		if len(logText) > 64<<10 {
+			logText = logText[len(logText)-64<<10:]
+		}
+		finished := st.State == "done" || st.State == "failed" || st.State == "rolled_back"
+		_, err = s.db.Exec(ctx, `UPDATE system_upgrades SET status = $2, step = $3, message = $4, log = $5,
+			finished_at = CASE WHEN $6 THEN coalesce(finished_at, now()) ELSE NULL END WHERE id = $1`,
+			st.ID, st.State, st.Step, st.Message, string(logText), finished)
+		if err != nil {
+			s.log.Warn("upgrade status", "err", err)
+		}
 	}
 }
 
