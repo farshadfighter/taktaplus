@@ -6,11 +6,12 @@
 # version and the database snapshot come back.
 set -u
 cd "$(dirname "$0")/.."
+. scripts/product.sh
 . scripts/common.sh
 ID=$1 STAGED=$2 NEW=$3
 U=data/upgrade
 STEP=start
-OLD=$(get_env TAKTAPLUS_VERSION)
+OLD=$(get_env "${ENV_PREFIX}_VERSION")
 
 status() {
 	printf '{"id":%s,"state":"%s","step":"%s","message":"%s"}\n' "$ID" "$1" "$2" "$3" > "$U/status.json.tmp"
@@ -28,8 +29,8 @@ rollback() {
 	if [ -d scripts.prev ]; then
 		for f in scripts.prev/*.sh; do install_file "$f" "scripts/$(basename "$f")" 755; done
 	fi
-	docker compose stop api
-	docker compose run --rm -T api upgrade-rollback || { status failed rollback "بازگرداندن نسخه‌ی پشتیبان دیتابیس ناموفق بود؛ با scripts/restore.sh یک بکاپ را بازگردانید"; exit 1; }
+	docker compose stop "$SVC"
+	docker compose run --rm -T "$SVC" upgrade-rollback || { status failed rollback "بازگرداندن نسخه‌ی پشتیبان دیتابیس ناموفق بود؛ با scripts/restore.sh یک بکاپ را بازگردانید"; exit 1; }
 	docker compose up -d $(services)
 	if wait_healthy 60; then
 		status rolled_back rollback "$1؛ نسخه‌ی $OLD دوباره در حال اجراست"
@@ -44,10 +45,10 @@ status running snapshot "ارتقا از $OLD به $NEW: نسخه‌ی پشتی�
 STEP=snapshot
 api_running || docker compose up -d $(services)
 wait_healthy 24 || fail "نسخه‌ی فعلی سالم نیست؛ پیش از ارتقا آن را رفع کنید"
-docker compose exec -T api taktaplus upgrade-snapshot || fail "نسخه‌ی پشتیبان دیتابیس ناموفق بود"
+docker compose exec -T "$SVC" "$BIN" upgrade-snapshot || fail "نسخه‌ی پشتیبان دیتابیس ناموفق بود"
 STEP=backup
 status running backup "بکاپ رمزنگاری‌شده"
-docker compose exec -T api taktaplus system-backup -trigger pre_upgrade || echo "هشدار: بکاپ رمزنگاری‌شده گرفته نشد (عبارت عبور بکاپ را در پنل تعیین کنید)"
+docker compose exec -T "$SVC" "$BIN" system-backup -trigger pre_upgrade || echo "هشدار: بکاپ رمزنگاری‌شده گرفته نشد (عبارت عبور بکاپ را در پنل تعیین کنید)"
 
 STEP=load
 status running load "بارگذاری ایمیج‌ها"
@@ -63,7 +64,7 @@ cp -p docker-compose.yml docker-compose.yml.prev
 rm -rf scripts.prev && mkdir scripts.prev && cp -p scripts/*.sh scripts.prev/
 install_file "$STAGED/docker-compose.yml" docker-compose.yml
 for f in "$STAGED"/scripts/*.sh; do install_file "$f" "scripts/$(basename "$f")" 755; done
-set_env TAKTAPLUS_VERSION "$NEW"
+set_env "${ENV_PREFIX}_VERSION" "$NEW"
 
 STEP=start
 status running start "راه‌اندازی $NEW"

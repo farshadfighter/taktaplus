@@ -1,5 +1,5 @@
-# Shared helpers for the TaktaPlus scripts; sourced, not run.
-# The working directory is the installation directory ($TAKTAPLUS_HOME).
+# Shared helpers for the TaktaPlus scripts; sourced after product.sh, not
+# run. The working directory is the installation directory.
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -17,7 +17,7 @@ get_env() { sed -n "s/^$1=//p" .env | tail -n 1; }
 # services: every service except the updater, which must not restart itself.
 services() { docker compose config --services | grep -vx updater; }
 
-api_running() { [ -n "$(docker compose ps --status running -q api 2>/dev/null)" ]; }
+api_running() { [ -n "$(docker compose ps --status running -q "$SVC" 2>/dev/null)" ]; }
 
 # wait_healthy [tries]: wait until the panel answers /healthz; give up
 # early when the api container keeps crashing.
@@ -25,10 +25,10 @@ wait_healthy() {
 	n=${1:-60}
 	i=0
 	down=0
-	until docker compose exec -T api wget -q -O /dev/null --no-check-certificate https://127.0.0.1:8443/healthz 2>/dev/null; do
+	until docker compose exec -T "$SVC" wget -q -O /dev/null --no-check-certificate "$HEALTH_URL" 2>/dev/null; do
 		i=$((i + 1))
 		[ "$i" -ge "$n" ] && return 1
-		case "$(docker compose ps -a --format '{{.State}}' api 2>/dev/null)" in
+		case "$(docker compose ps -a --format '{{.State}}' "$SVC" 2>/dev/null)" in
 		restarting | exited | dead) down=$((down + 1)) ;;
 		*) down=0 ;;
 		esac

@@ -6,6 +6,7 @@
 set -eu
 SRC=$(cd "$(dirname "$0")" && pwd)
 HOME_DIR=${TAKTAPLUS_HOME:-/opt/taktaplus}
+. "$SRC/scripts/product.sh"
 . "$SRC/scripts/common.sh"
 
 [ "$(id -u)" = 0 ] || die "run as root"
