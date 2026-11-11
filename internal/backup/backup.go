@@ -90,12 +90,12 @@ type Service struct {
 	now func() time.Time
 
 	wg       sync.WaitGroup // background restore watchers
-	onStored func(deviceID, backupID int64)
+	onStored []func(deviceID, backupID int64)
 }
 
 // OnStored registers a function called after each new configuration is
-// stored (compliance evaluation). It must not block.
-func (s *Service) OnStored(f func(deviceID, backupID int64)) { s.onStored = f }
+// stored (compliance evaluation, policy drift). It must not block.
+func (s *Service) OnStored(f func(deviceID, backupID int64)) { s.onStored = append(s.onStored, f) }
 
 // New returns the service; dir holds the encrypted files.
 func New(db *pgxpool.Pool, box *secretbox.Box, inv *inventory.Service, dir string, log *slog.Logger, opt Options) *Service {
@@ -215,8 +215,8 @@ func (s *Service) Run(ctx context.Context, deviceID int64, reason, actor string)
 	if err := s.applyRetention(ctx, deviceID); err != nil {
 		s.log.Error("backup retention", "device", d.Name, "err", err)
 	}
-	if s.onStored != nil {
-		s.onStored(deviceID, id)
+	for _, f := range s.onStored {
+		f(deviceID, id)
 	}
 	b, err = s.Get(ctx, id)
 	return b, false, err

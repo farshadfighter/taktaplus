@@ -558,3 +558,41 @@ export type ComplianceResult = {
   broken_rules?: number
 }
 export type ComplianceException = { id: number; device_id: number; ref: string; reason: string; created_by: string; created_at: string }
+
+// --- F4 policy packages ---
+export type PolicyObjectType = 'address' | 'addrgrp' | 'service' | 'servicegrp' | 'schedule' | 'ippool' | 'vip'
+export type PolicyValue = {
+  subnet?: string; fqdn?: string; start_ip?: string; end_ip?: string; country?: string
+  members?: string[]
+  protocol?: string; tcp_ports?: string; udp_ports?: string; icmp_type?: number
+  days?: string; start?: string; end?: string
+  ext_ip?: string; mapped_ip?: string; ext_zone?: string; ext_port?: string; mapped_port?: string
+  pool_start?: string; pool_end?: string
+}
+export type PolicyObject = {
+  id: number; type: PolicyObjectType; name: string; value: PolicyValue; per_device: boolean; comment: string
+  mappings: Record<string, PolicyValue>
+}
+export type PolicyConflict = {
+  id: number; object_id: number; type: string; name: string; device_id: number; device_name: string
+  shared: PolicyValue; device_value: PolicyValue
+}
+export type FwPolicy = {
+  id: number; name: string; section?: string; srcintf: string[]; dstintf: string[]; srcaddr: string[]; dstaddr: string[]
+  service: string[]; schedule: string; action: 'accept' | 'deny'; nat: boolean; ippool?: string[]
+  av_profile?: string; webfilter_profile?: string; ips_sensor?: string; application_list?: string; ssl_ssh_profile?: string
+  logtraffic: string; disabled: boolean; comments?: string
+}
+export type PolicyOp = { action: 'create' | 'update' | 'delete' | 'move'; type: string; name: string; detail: string }
+export type PolicyStatus = {
+  device_id: number; device_name: string; installed: number; installed_at: string | null
+  drift: PolicyOp[] | null; checked_at: string | null; state: 'in_sync' | 'local_changes' | 'outdated' | 'not_installed'
+}
+export type PolicyPackage = {
+  id: number; name: string; description: string; device_ids: number[]; vdom: string; version: number
+  draft: FwPolicy[] | null; has_draft: boolean; draft_base: number | null; locked_by: string; locked_at: string | null; updated_at: string
+}
+export type PolicyVersion = { version: number; policies: FwPolicy[] | null; note: string; created_by: string; created_at: string }
+export type PolicyPlan = {
+  device_id: number; device_name: string; blocked: string[] | null; warnings: string[] | null; ops: PolicyOp[] | null; cli: string; managed: string[] | null
+}

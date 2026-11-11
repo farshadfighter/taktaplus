@@ -219,9 +219,17 @@ func tokens(line string) []string {
 	return out
 }
 
-// Quote renders a value for CLI output.
+// Quote renders a value for CLI output: plain words stay bare, anything
+// else is double-quoted.
 func Quote(v string) string {
-	if v != "" && !strings.ContainsAny(v, " \t\"\\") {
+	plain := v != ""
+	for _, c := range v {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("._:/-", c)) {
+			plain = false
+			break
+		}
+	}
+	if plain {
 		return v
 	}
 	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(v) + `"`

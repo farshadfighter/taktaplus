@@ -7,7 +7,7 @@ import { api, type Change, type DeviceRow } from './api'
 import { useFetch } from './useFetch'
 import { licenseTag } from './ui'
 
-export const kindLabel: Record<string, string> = { signatures: 'استقرار سیگنیچر', firmware: 'ارتقای فرم‌ور', script: 'اسکریپت CLI' }
+export const kindLabel: Record<string, string> = { signatures: 'استقرار سیگنیچر', firmware: 'ارتقای فرم‌ور', script: 'اسکریپت CLI', policy_install: 'نصب Policy Package' }
 
 export const changeStatusTag = (s: string) =>
   ({

@@ -34,18 +34,19 @@ const (
 	PermLogsManage    Perm = "logs.manage"       // log storage, sources and the country database
 	PermReports       Perm = "reports.manage"    // report templates and schedules
 	PermCompliance    Perm = "compliance.manage" // configuration templates, compliance rules and exceptions
+	PermPolicy        Perm = "policy.manage"     // shared objects and policy packages
 )
 
 var rolePerms = map[Role][]Perm{
 	RoleSuperAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
 		PermChangeApprove, PermLicenseRead, PermLicenseManage, PermUsersManage, PermAuditRead, PermSettings, PermPackages, PermChangeCreate, PermOTP,
-		PermLogsRead, PermLogsManage, PermReports, PermCompliance,
+		PermLogsRead, PermLogsManage, PermReports, PermCompliance, PermPolicy,
 	},
 	RoleAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
 		PermChangeApprove, PermLicenseRead, PermAuditRead, PermPackages, PermChangeCreate, PermOTP,
-		PermLogsRead, PermLogsManage, PermReports, PermCompliance,
+		PermLogsRead, PermLogsManage, PermReports, PermCompliance, PermPolicy,
 	},
 	RoleApprover: {PermDevicesRead, PermChangeApprove, PermLicenseRead, PermAuditRead},
 	RoleOperator: {PermDevicesRead, PermBackupsRun, PermLicenseRead, PermChangeCreate, PermLogsRead},
