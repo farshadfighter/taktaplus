@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/farshadfighter/taktaplus/internal/alerts"
 	"github.com/farshadfighter/taktaplus/internal/backup"
 	"github.com/farshadfighter/taktaplus/internal/changes"
 	"github.com/farshadfighter/taktaplus/internal/fortiosconf"
@@ -609,4 +610,29 @@ func (s *Service) autoFix(ctx context.Context, d *inventory.Device, res *Result,
 			s.log.Warn("automatic drift fix", "device", d.Name, "template", t.Name, "err", err)
 		}
 	}
+}
+
+// Facts gives the alert rules each device's score and drifting templates.
+func (s *Service) Facts(ctx context.Context) (map[int64]alerts.ComplianceFact, error) {
+	list, err := s.Results(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64]alerts.ComplianceFact{}
+	for _, r := range list {
+		if r.Error != "" {
+			continue
+		}
+		f := alerts.ComplianceFact{Score: r.Score}
+		for _, d := range r.Drift {
+			for _, x := range d.Differences {
+				if !x.Excepted {
+					f.Drifting = append(f.Drifting, d.Template)
+					break
+				}
+			}
+		}
+		out[r.DeviceID] = f
+	}
+	return out, nil
 }

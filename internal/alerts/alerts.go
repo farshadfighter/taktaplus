@@ -37,9 +37,26 @@ const (
 	KindLogSilence  = "log_silence"  // threshold: minutes without logs
 	KindLogAttacks  = "log_attacks"  // threshold: attacks from one source within the window
 	KindVPNFailures = "vpn_failures" // threshold: failed VPN logins of one user and address within the window
+	// Compliance (F3).
+	KindComplianceScore = "compliance_score" // threshold: minimum score
+	KindConfigDrift     = "config_drift"     // drift from an assigned template
 )
 
-var kinds = []string{KindOffline, KindCPU, KindMem, KindDisk, KindContractExpiry, KindLicenseExpiry, KindLogSilence, KindLogAttacks, KindVPNFailures}
+// ComplianceFact is the latest compliance result of a device.
+type ComplianceFact struct {
+	Score    int
+	Drifting []string // templates the device departs from
+}
+
+// ComplianceSource answers the compliance rules.
+type ComplianceSource interface {
+	Facts(ctx context.Context) (map[int64]ComplianceFact, error)
+}
+
+// SetComplianceSource enables the compliance rules.
+func (s *Service) SetComplianceSource(cs ComplianceSource) { s.compliance = cs }
+
+var kinds = []string{KindOffline, KindCPU, KindMem, KindDisk, KindContractExpiry, KindLicenseExpiry, KindLogSilence, KindLogAttacks, KindVPNFailures, KindComplianceScore, KindConfigDrift}
 
 // LogHit is one source that crossed a log rule's threshold.
 type LogHit struct {
@@ -105,6 +122,10 @@ func (r *Rule) validate() error {
 		if r.Threshold < 0 || r.Threshold > 365 {
 			return invalidf("threshold must be between 0 and 365 days")
 		}
+	case KindComplianceScore:
+		if r.Threshold < 1 || r.Threshold > 100 {
+			return invalidf("threshold must be a score between 1 and 100")
+		}
 	case KindLogSilence:
 		if r.Threshold < 5 || r.Threshold > 10080 {
 			return invalidf("threshold must be 5 to 10080 minutes")
@@ -155,13 +176,14 @@ type Alert struct {
 
 // Service stores rules, channels and alerts and evaluates rules.
 type Service struct {
-	db    *pgxpool.Pool
-	box   *secretbox.Box
-	inv   *inventory.Service
-	guard *license.Guard
-	log   *slog.Logger
-	send  sender
-	logs  LogSource
+	db         *pgxpool.Pool
+	box        *secretbox.Box
+	inv        *inventory.Service
+	guard      *license.Guard
+	log        *slog.Logger
+	send       sender
+	logs       LogSource
+	compliance ComplianceSource
 	// mailer sends report emails; tests replace it.
 	mailer    func(ctx context.Context, c ChannelConfig, to []string, subject, body string, files []Attachment, at time.Time) error
 	messenger func(ctx context.Context, kind string, c ChannelConfig, text string, files []Attachment) error
@@ -424,8 +446,9 @@ type condition struct {
 
 // logFacts are the log store answers for one evaluation.
 type logFacts struct {
-	lastSeen map[int64]time.Time
-	hits     map[int64]map[int64][]LogHit // by rule, then device
+	lastSeen   map[int64]time.Time
+	hits       map[int64]map[int64][]LogHit // by rule, then device
+	compliance map[int64]ComplianceFact
 }
 
 func (s *Service) loadLogFacts(ctx context.Context, rules []Rule) *logFacts {
@@ -500,6 +523,16 @@ func (s *Service) conditions(r Rule, d *inventory.Device, st *inventory.Status, 
 			out = append(out, condition{subject: c.Name, message: expiryText("FortiGuard contract "+c.Name, *c.Expires, now)})
 		}
 		return out
+	case KindComplianceScore:
+		if f, ok := lf.compliance[d.ID]; ok && float64(f.Score) < r.Threshold {
+			return []condition{{message: fmt.Sprintf("compliance score is %d (target %.0f)", f.Score, r.Threshold)}}
+		}
+	case KindConfigDrift:
+		var out []condition
+		for _, t := range lf.compliance[d.ID].Drifting {
+			out = append(out, condition{subject: t, message: "configuration departs from template " + t})
+		}
+		return out
 	case KindLogSilence:
 		if last, ok := lf.lastSeen[d.ID]; ok && now.Sub(last) >= time.Duration(r.Threshold)*time.Minute {
 			return []condition{{message: fmt.Sprintf("no logs received for %d minutes (last at %s)", int(now.Sub(last).Minutes()), last.UTC().Format("2006-01-02 15:04 UTC"))}}
@@ -567,6 +600,14 @@ func (s *Service) Evaluate(ctx context.Context) error {
 	}
 	lic, _ := s.guard.License()
 	lf := s.loadLogFacts(ctx, rules)
+	var cf map[int64]ComplianceFact
+	if s.compliance != nil {
+		var err error
+		if cf, err = s.compliance.Facts(ctx); err != nil {
+			s.log.Warn("compliance alert rules", "err", err)
+			cf = nil
+		}
+	}
 	var notes []pending
 	for _, r := range rules {
 		if !r.Enabled {
@@ -577,6 +618,10 @@ func (s *Service) Evaluate(ctx context.Context) error {
 			// No log store, or it did not answer: leave these alerts as they are.
 			continue
 		}
+		isCompliance := r.Kind == KindComplianceScore || r.Kind == KindConfigDrift
+		if isCompliance && cf == nil {
+			continue
+		}
 		for _, d := range devices {
 			// Expired and unlicensed devices are not polled; only the
 			// license rule still applies to them.
@@ -585,7 +630,11 @@ func (s *Service) Evaluate(ctx context.Context) error {
 			}
 			var conds []condition
 			if r.GroupID == nil || (d.GroupID != nil && *d.GroupID == *r.GroupID) {
-				conds = s.conditions(r, d, statuses[d.ID], lic, lf, now)
+				facts := lf
+				if isCompliance {
+					facts = &logFacts{compliance: cf}
+				}
+				conds = s.conditions(r, d, statuses[d.ID], lic, facts, now)
 			}
 			n, err := s.apply(ctx, r, d, conds, now)
 			if err != nil {

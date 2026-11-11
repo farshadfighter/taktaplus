@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -212,7 +213,7 @@ func TestServiceRunsAndSchedules(t *testing.T) {
 	}
 
 	tpls, err := svc.Templates(ctx)
-	if err != nil || len(tpls) != 7 || !tpls[0].Builtin {
+	if err != nil || len(tpls) != 8 || !tpls[0].Builtin {
 		t.Fatalf("templates = %v, %v", tpls, err)
 	}
 	if _, err := svc.SaveTemplate(ctx, Template{ID: tpls[0].ID, Name: "x", Widgets: []string{"kpi_overview"}}, "admin"); err == nil {
@@ -315,7 +316,9 @@ func TestServiceRunsAndSchedules(t *testing.T) {
 			summary = tp
 		}
 	}
-	data, err := lg.Query(ctx, summary.Widgets, logs.Range{From: now.Add(-24 * time.Hour), To: now.Add(time.Minute)})
+	// Compliance widgets are registered by the compliance service.
+	ids := slices.DeleteFunc(slices.Clone(summary.Widgets), func(id string) bool { return !logs.KnownWidget(id) })
+	data, err := lg.Query(ctx, ids, logs.Range{From: now.Add(-24 * time.Hour), To: now.Add(time.Minute)})
 	if err != nil {
 		t.Fatal(err)
 	}

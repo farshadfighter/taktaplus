@@ -200,3 +200,40 @@ func TestMessengers(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+type fakeCompliance map[int64]ComplianceFact
+
+func (f fakeCompliance) Facts(context.Context) (map[int64]ComplianceFact, error) { return f, nil }
+
+func TestComplianceRules(t *testing.T) {
+	ctx := context.Background()
+	s, dev := newService(t)
+	out := &outbox{}
+	s.send = out.send
+	ch, _ := s.SaveChannel(ctx, Channel{Name: "ops", Kind: ChannelWebhook, Config: ChannelConfig{URL: "https://hooks.example/x"}, Enabled: true})
+	rules, _ := s.ListRules(ctx)
+	for _, r := range rules {
+		r.Enabled = r.Kind == KindComplianceScore || r.Kind == KindConfigDrift
+		r.ChannelIDs = []int64{ch}
+		if _, err := s.SaveRule(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fc := fakeCompliance{dev: {Score: 55, Drifting: []string{"پایه‌ی شعب"}}}
+	s.SetComplianceSource(fc)
+	if err := s.Evaluate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	msgs := out.take()
+	if len(msgs) != 2 || !strings.Contains(msgs[0].Text+msgs[1].Text, "compliance score is 55 (target 70)") ||
+		!strings.Contains(msgs[0].Text+msgs[1].Text, "template پایه‌ی شعب") {
+		t.Fatalf("messages = %+v", msgs)
+	}
+	fc[dev] = ComplianceFact{Score: 90}
+	if err := s.Evaluate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if msgs := out.take(); len(msgs) != 2 || msgs[0].Event != "resolved" {
+		t.Fatalf("resolve = %+v", msgs)
+	}
+}

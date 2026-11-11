@@ -85,7 +85,14 @@ INSERT INTO compliance_rules (name, severity, platform, section, scope, match, r
  ('HTTP مدیریتی روی اینترفیس‌ها خاموش باشد (FortiWeb)', 'critical', 'fortiweb', 'system interface', 'each', '[]',
   '[{"key":"allowaccess","op":"not_contains","value":"http"}]', true);
 
+INSERT INTO report_templates (name, description, widgets, builtin) VALUES
+ ('انطباق پیکربندی', 'امتیاز انطباق، انحراف از قالب‌ها و قوانین نقض‌شده‌ی هر دستگاه', '{sys_compliance_kpi,sys_compliance}', true);
+UPDATE report_templates SET widgets = array_append(widgets, 'sys_compliance_kpi')
+ WHERE name = 'خلاصه‌ی مدیریتی' AND builtin;
+
 -- +goose Down
+UPDATE report_templates SET widgets = array_remove(widgets, 'sys_compliance_kpi') WHERE name = 'خلاصه‌ی مدیریتی' AND builtin;
+DELETE FROM report_templates WHERE name = 'انطباق پیکربندی' AND builtin;
 DELETE FROM alert_rules WHERE kind IN ('compliance_score', 'config_drift');
 ALTER TABLE alert_rules DROP CONSTRAINT alert_rules_kind_check;
 ALTER TABLE alert_rules ADD CONSTRAINT alert_rules_kind_check

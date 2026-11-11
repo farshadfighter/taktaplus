@@ -30,21 +30,22 @@ const (
 	PermUsersManage   Perm = "users.manage"
 	PermAuditRead     Perm = "audit.read"
 	PermSettings      Perm = "settings.manage"
-	PermLogsRead      Perm = "logs.read"      // dashboards, log viewer, generated reports
-	PermLogsManage    Perm = "logs.manage"    // log storage, sources and the country database
-	PermReports       Perm = "reports.manage" // report templates and schedules
+	PermLogsRead      Perm = "logs.read"         // dashboards, log viewer, generated reports
+	PermLogsManage    Perm = "logs.manage"       // log storage, sources and the country database
+	PermReports       Perm = "reports.manage"    // report templates and schedules
+	PermCompliance    Perm = "compliance.manage" // configuration templates, compliance rules and exceptions
 )
 
 var rolePerms = map[Role][]Perm{
 	RoleSuperAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
 		PermChangeApprove, PermLicenseRead, PermLicenseManage, PermUsersManage, PermAuditRead, PermSettings, PermPackages, PermChangeCreate, PermOTP,
-		PermLogsRead, PermLogsManage, PermReports,
+		PermLogsRead, PermLogsManage, PermReports, PermCompliance,
 	},
 	RoleAdmin: {
 		PermDevicesRead, PermDevicesWrite, PermBackupsRun, PermBackupsAdmin, PermRestore, PermAlertsManage,
 		PermChangeApprove, PermLicenseRead, PermAuditRead, PermPackages, PermChangeCreate, PermOTP,
-		PermLogsRead, PermLogsManage, PermReports,
+		PermLogsRead, PermLogsManage, PermReports, PermCompliance,
 	},
 	RoleApprover: {PermDevicesRead, PermChangeApprove, PermLicenseRead, PermAuditRead},
 	RoleOperator: {PermDevicesRead, PermBackupsRun, PermLicenseRead, PermChangeCreate, PermLogsRead},
