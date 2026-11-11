@@ -169,12 +169,12 @@ function ScheduleModal({ open, value, templates, onClose, onSaved }: { open: boo
         </Form.Item>
         <Row gutter={12}>
           <Col span={10}>
-            <Form.Item name="channel_id" label="ارسال با کانال ایمیل" extra={!channels.data?.items.length ? 'کانال ایمیل را در «هشدارها» بسازید.' : undefined}>
-              <Select allowClear placeholder="بدون ارسال ایمیل" options={(channels.data?.items ?? []).map((c) => ({ value: c.id, label: c.name }))} />
+            <Form.Item name="channel_id" label="ارسال با کانال" extra={!channels.data?.items.length ? 'کانال ایمیل، بله یا ایتا را در «هشدارها» بسازید.' : undefined}>
+              <Select allowClear placeholder="بدون ارسال" options={(channels.data?.items ?? []).map((c) => ({ value: c.id, label: `${c.name} (${({ email: 'ایمیل', bale: 'بله', eitaa: 'ایتا' } as Record<string, string>)[c.kind] ?? c.kind})` }))} />
             </Form.Item>
           </Col>
           <Col span={14}>
-            <Form.Item name="recipients" label="گیرندگان (خالی = گیرندگان کانال)">
+            <Form.Item name="recipients" label="گیرندگان ایمیل (خالی = گیرندگان کانال)">
               <Input.TextArea rows={2} dir="ltr" placeholder="ciso@example.com" />
             </Form.Item>
           </Col>

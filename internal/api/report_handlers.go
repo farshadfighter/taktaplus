@@ -121,7 +121,7 @@ func (s *srv) deleteReportSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *srv) reportChannels(w http.ResponseWriter, r *http.Request) {
-	list, err := s.alerts.EmailChannels(r.Context())
+	list, err := s.alerts.ReportChannels(r.Context())
 	if err != nil {
 		internalError(s.log, w, r, err)
 		return

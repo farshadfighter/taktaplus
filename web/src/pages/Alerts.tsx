@@ -14,16 +14,22 @@ const ruleKinds: Record<string, { label: string; unit?: string }> = {
   disk: { label: 'مصرف دیسک', unit: '٪' },
   contract_expiry: { label: 'انقضای قرارداد FortiGuard', unit: 'روز قبل' },
   license_expiry: { label: 'انقضای لایسنس تکتاپلاس', unit: 'روز قبل' },
+  log_silence: { label: 'قطع دریافت لاگ از دستگاه', unit: 'دقیقه' },
+  log_attacks: { label: 'حمله‌ی پرتکرار از یک مبدأ (IPS/WAF)', unit: 'حمله' },
+  vpn_failures: { label: 'ورود ناموفق مکرر VPN', unit: 'تلاش' },
 }
 
-const channelKinds: Record<string, string> = { email: 'ایمیل', webhook: 'Webhook', syslog: 'Syslog' }
+const windowed = (k?: string) => k === 'log_attacks' || k === 'vpn_failures'
+
+
+const channelKinds: Record<string, string> = { email: 'ایمیل', bale: 'بله', eitaa: 'ایتا', webhook: 'Webhook', syslog: 'Syslog' }
 
 function RuleModal({ rule, onClose, groups, channels }: { rule: Partial<Rule> | null; onClose: (saved: boolean) => void; groups: Group[]; channels: Channel[] }) {
   const [form] = Form.useForm()
   const [error, setError] = useState<string | null>(null)
   const kind = Form.useWatch('kind', form)
   const save = async (v: Rule) => {
-    const body = { ...v, group_id: v.group_id ?? null, channel_ids: v.channel_ids ?? [], threshold: v.threshold ?? 0, duration_minutes: v.duration_minutes ?? 0, repeat_minutes: v.repeat_minutes ?? 0 }
+    const body = { ...v, group_id: v.group_id ?? null, channel_ids: v.channel_ids ?? [], threshold: v.threshold ?? 0, duration_minutes: v.duration_minutes ?? 0, repeat_minutes: v.repeat_minutes ?? 0, window_minutes: v.window_minutes ?? 0 }
     try {
       if (rule?.id) await api.put(`/alert-rules/${rule.id}`, body)
       else await api.post('/alert-rules', body)
@@ -42,7 +48,10 @@ function RuleModal({ rule, onClose, groups, channels }: { rule: Partial<Rule> | 
         <Form.Item name="kind" label="شرط"><Select options={Object.entries(ruleKinds).map(([value, k]) => ({ value, label: k.label }))} /></Form.Item>
         <Space size={16} wrap>
           {kind !== 'offline' && (
-            <Form.Item name="threshold" label={`آستانه (${ruleKinds[kind]?.unit ?? ''})`}><InputNumber min={0} max={365} /></Form.Item>
+            <Form.Item name="threshold" label={`آستانه (${ruleKinds[kind]?.unit ?? ''})`}><InputNumber min={0} max={kind?.startsWith('log_') || kind === 'vpn_failures' ? 1000000 : 365} /></Form.Item>
+          )}
+          {windowed(kind) && (
+            <Form.Item name="window_minutes" label="در بازه‌ی (دقیقه)" rules={[{ required: true }]}><InputNumber min={1} max={1440} /></Form.Item>
           )}
           <Form.Item name="duration_minutes" label="مدت پایداری (دقیقه)"><InputNumber min={0} max={1440} /></Form.Item>
           <Form.Item name="repeat_minutes" label="تکرار اعلان (دقیقه، ۰ = یک‌بار)"><InputNumber min={0} max={10080} /></Form.Item>
@@ -112,6 +121,21 @@ function ChannelModal({ channel, onClose }: { channel: Partial<Channel> | null; 
             </Form.Item>
           </>
         )}
+        {(kind === 'bale' || kind === 'eitaa') && (
+          <>
+            <Form.Item name={['config', 'bot_token']} label="توکن ربات" rules={[{ required: true }]}
+              extra={kind === 'bale' ? 'از ربات BotFather در بله دریافت کنید.' : 'توکن ایتایار (eitaayar.ir) را وارد کنید.'}>
+              <Input.Password dir="ltr" autoComplete="new-password" />
+            </Form.Item>
+            <Form.Item name={['config', 'chat_id']} label="شناسه‌ی گفتگو یا کانال" rules={[{ required: true }]}
+              extra="ربات باید عضو گروه یا مدیر کانال باشد.">
+              <Input dir="ltr" placeholder={kind === 'bale' ? '@soc_channel یا 123456789' : 'soc_channel'} />
+            </Form.Item>
+            <Form.Item name={['config', 'api_base']} label="آدرس API (اختیاری)" extra="فقط اگر از پراکسی یا آدرس دیگری استفاده می‌کنید.">
+              <Input dir="ltr" placeholder={kind === 'bale' ? 'https://tapi.bale.ai' : 'https://eitaayar.ir/api'} />
+            </Form.Item>
+          </>
+        )}
         {kind === 'syslog' && (
           <Space.Compact block>
             <Form.Item name={['config', 'address']} label="آدرس (host:port)" style={{ flex: 1 }} rules={[{ required: true }]}><Input dir="ltr" placeholder="10.0.0.5:514" /></Form.Item>
@@ -178,7 +202,7 @@ export default function Alerts() {
                   { title: 'نام', dataIndex: 'name' },
                   { title: 'شرط', render: (_, r) => ruleKinds[r.kind]?.label ?? r.kind },
                   { title: 'آستانه', render: (_, r) => (r.kind === 'offline' ? '—' : `${faNum(r.threshold)} ${ruleKinds[r.kind]?.unit ?? ''}`) },
-                  { title: 'مدت', render: (_, r) => (r.duration_minutes ? `${faNum(r.duration_minutes)} دقیقه` : 'فوری') },
+                  { title: 'مدت', render: (_, r) => (windowed(r.kind) ? `در ${faNum(r.window_minutes)} دقیقه` : r.duration_minutes ? `${faNum(r.duration_minutes)} دقیقه` : 'فوری') },
                   { title: 'شدت', render: (_, r) => severityTag(r.severity) },
                   { title: 'کانال‌ها', render: (_, r) => (r.channel_ids.length ? faNum(r.channel_ids.length) : <Typography.Text type="secondary">فقط پنل</Typography.Text>) },
                   { title: 'وضعیت', render: (_, r) => (r.enabled ? <Tag color="green">فعال</Tag> : <Tag>غیرفعال</Tag>) },
@@ -206,7 +230,7 @@ export default function Alerts() {
                 columns={[
                   { title: 'نام', dataIndex: 'name' },
                   { title: 'نوع', render: (_, c) => channelKinds[c.kind] },
-                  { title: 'مقصد', render: (_, c) => <span dir="ltr">{c.kind === 'email' ? c.config.to?.join(', ') : c.kind === 'webhook' ? c.config.url : c.config.address}</span> },
+                  { title: 'مقصد', render: (_, c) => <span dir="ltr">{c.kind === 'email' ? c.config.to?.join(', ') : c.kind === 'webhook' ? c.config.url : c.kind === 'bale' || c.kind === 'eitaa' ? c.config.chat_id : c.config.address}</span> },
                   { title: 'وضعیت', render: (_, c) => (c.enabled ? <Tag color="green">فعال</Tag> : <Tag>غیرفعال</Tag>) },
                   {
                     title: '', render: (_, c) => (

@@ -49,6 +49,10 @@ type ChannelConfig struct {
 	// syslog
 	Address  string `json:"address,omitempty"`  // host:port
 	Protocol string `json:"protocol,omitempty"` // udp, tcp
+	// bale, eitaa
+	BotToken string `json:"bot_token,omitempty"`
+	ChatID   string `json:"chat_id,omitempty"`
+	APIBase  string `json:"api_base,omitempty"`
 }
 
 // redacted returns a copy without secrets, for the API.
@@ -58,6 +62,9 @@ func (c ChannelConfig) redacted() ChannelConfig {
 	}
 	if c.Secret != "" {
 		c.Secret = "********"
+	}
+	if c.BotToken != "" {
+		c.BotToken = "********"
 	}
 	return c
 }
@@ -103,6 +110,8 @@ func (c *ChannelConfig) validate(kind string) error {
 		if c.Protocol != "udp" && c.Protocol != "tcp" {
 			return invalidf("syslog protocol must be udp or tcp")
 		}
+	case ChannelBale, ChannelEitaa:
+		return validMessenger(c)
 	default:
 		return invalidf("unknown channel kind")
 	}
@@ -144,6 +153,8 @@ func send(ctx context.Context, kind string, c ChannelConfig, m Message) error {
 		return sendWebhook(ctx, c, m)
 	case ChannelSyslog:
 		return sendSyslog(ctx, c, m)
+	case ChannelBale, ChannelEitaa:
+		return sendMessenger(ctx, kind, c, m.subject()+"\n\n"+m.body(), nil)
 	}
 	return fmt.Errorf("unknown channel kind %q", kind)
 }

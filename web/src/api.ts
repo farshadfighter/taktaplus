@@ -199,6 +199,7 @@ export type Rule = {
   channel_ids: number[]
   repeat_minutes: number
   enabled: boolean
+  window_minutes: number
 }
 
 export type ChannelConfig = {
@@ -213,9 +214,12 @@ export type ChannelConfig = {
   secret?: string
   address?: string
   protocol?: string
+  bot_token?: string
+  chat_id?: string
+  api_base?: string
 }
 
-export type Channel = { id: number; name: string; kind: 'email' | 'webhook' | 'syslog'; config: ChannelConfig; enabled: boolean }
+export type Channel = { id: number; name: string; kind: 'email' | 'webhook' | 'syslog' | 'bale' | 'eitaa'; config: ChannelConfig; enabled: boolean }
 
 export type Backup = {
   id: number

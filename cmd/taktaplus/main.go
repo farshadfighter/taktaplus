@@ -253,6 +253,9 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	if err := logSvc.Load(ctx); err != nil {
 		return fmt.Errorf("log settings: %w", err)
 	}
+	if logSvc.Enabled() {
+		alertSvc.SetLogSource(logSvc)
+	}
 	if col := logSvc.Collector(); col != nil {
 		l := logs.Listeners{UDP: cfg.SyslogUDP, TCP: cfg.SyslogTCP, TLS: cfg.SyslogTLS}
 		if l.TLS != "" {
