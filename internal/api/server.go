@@ -28,6 +28,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/monitor"
 	"github.com/farshadfighter/taktaplus/internal/otp"
 	"github.com/farshadfighter/taktaplus/internal/packages"
+	"github.com/farshadfighter/taktaplus/internal/policy"
 	"github.com/farshadfighter/taktaplus/internal/radiussrv"
 	"github.com/farshadfighter/taktaplus/internal/reports"
 	"github.com/farshadfighter/taktaplus/internal/scripts"
@@ -62,6 +63,7 @@ type Deps struct {
 	Reports      *reports.Service
 	SyslogServer string // address devices send logs to, suggested in the UI
 	Compliance   *compliance.Service
+	Policy       *policy.Service
 }
 
 type srv struct {
@@ -89,6 +91,7 @@ type srv struct {
 	reports      *reports.Service
 	syslogServer string
 	compliance   *compliance.Service
+	policy       *policy.Service
 }
 
 // New returns the root HTTP handler.
@@ -97,7 +100,7 @@ func New(d Deps) http.Handler {
 		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups, pkgs: d.Packages, tmpDir: d.TmpDir,
 		changes: d.Changes, scripts: d.Scripts, firmware: d.Firmware,
 		otp: d.OTP, sms: d.SMS, radius: d.Radius, smtpgw: d.Gateway, radiusAddr: d.RadiusAddr, smtpAddr: d.SMTPAddr,
-		logs: d.Logs, reports: d.Reports, syslogServer: d.SyslogServer, compliance: d.Compliance}
+		logs: d.Logs, reports: d.Reports, syslogServer: d.SyslogServer, compliance: d.Compliance, policy: d.Policy}
 	if s.tmpDir == "" {
 		s.tmpDir = os.TempDir()
 	}
@@ -305,6 +308,29 @@ func New(d Deps) http.Handler {
 			r.With(cm).Post("/compliance/rules", s.saveComplianceRule)
 			r.With(cm).Put("/compliance/rules/{id}", s.saveComplianceRule)
 			r.With(cm).Delete("/compliance/rules/{id}", s.deleteComplianceRule)
+
+			if s.policy != nil {
+				pm := requirePerm(auth.PermPolicy)
+				pr := s.policyRoutes()
+				r.With(read).Get("/policy/objects", s.listPolicyObjects)
+				r.With(pm).Post("/policy/objects", s.savePolicyObject)
+				r.With(pm).Put("/policy/objects/{id}", s.savePolicyObject)
+				r.With(pm).Delete("/policy/objects/{id}", s.deletePolicyObject)
+				r.With(pm).Post("/policy/conflicts/{id}/resolve", s.resolvePolicyConflict)
+				r.With(read).Get("/policy/interfaces", s.policyInterfaces)
+				r.With(pm).Put("/policy/interfaces/{id}", s.setPolicyInterfaces)
+				r.With(read).Get("/policy/packages", s.listPolicyPackages)
+				r.With(pm).Post("/policy/packages", s.savePolicyPackage)
+				r.With(read).Get("/policy/packages/{id}", s.getPolicyPackage)
+				r.With(pm).Put("/policy/packages/{id}", s.savePolicyPackage)
+				r.With(pm).Delete("/policy/packages/{id}", s.deletePolicyPackage)
+				r.With(read).Get("/policy/packages/{id}/version", pr["version"])
+				r.With(read).Get("/policy/packages/{id}/preview", pr["preview"])
+				for _, a := range []string{"lock", "unlock", "draft", "discard", "publish", "revert", "import", "accept"} {
+					r.With(pm).Post("/policy/packages/{id}/"+a, pr[a])
+				}
+				r.With(create).Post("/policy/packages/{id}/install", pr["install"])
+			}
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

@@ -42,6 +42,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/monitor"
 	"github.com/farshadfighter/taktaplus/internal/otp"
 	"github.com/farshadfighter/taktaplus/internal/packages"
+	"github.com/farshadfighter/taktaplus/internal/policy"
 	"github.com/farshadfighter/taktaplus/internal/radiussrv"
 	"github.com/farshadfighter/taktaplus/internal/reports"
 	"github.com/farshadfighter/taktaplus/internal/scripts"
@@ -205,6 +206,15 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	changeSvc.Register(deploy.KindSignatures, deploy.NewSignatures(installer))
 	changeSvc.Register(deploy.KindFirmware, firmware)
 	changeSvc.Register(scripts.Kind, scripts.NewRunner(scriptSvc))
+	policySvc := policy.New(pool, inv, backups, changeSvc, log.With("component", "policy"))
+	changeSvc.Register(policy.Kind, policySvc.Runner())
+	backups.OnStored(func(deviceID, _ int64) {
+		go func() {
+			if err := policySvc.CheckDrift(ctx, deviceID); err != nil {
+				log.Warn("policy drift check", "device", deviceID, "err", err)
+			}
+		}()
+	})
 	go changeSvc.Run(ctx)
 	radiusSrv := radiussrv.New(pool, cfg.MasterKey, store, otpSvc, log.With("component", "radius"))
 	if cfg.RadiusListen != "" {
@@ -256,6 +266,7 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 	if logSvc.Enabled() {
 		alertSvc.SetLogSource(logSvc)
+		policySvc.SetHitSource(logSvc)
 	}
 	if col := logSvc.Collector(); col != nil {
 		l := logs.Listeners{UDP: cfg.SyslogUDP, TCP: cfg.SyslogTCP, TLS: cfg.SyslogTLS}
@@ -289,7 +300,7 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 			Inventory: inv, Alerts: alertSvc, Monitor: mon, Backups: backups, Packages: pkgs, TmpDir: tmpDir,
 			Changes: changeSvc, Scripts: scriptSvc, Firmware: firmware,
 			OTP: otpSvc, SMS: smsSvc, Radius: radiusSrv, Gateway: gateway, RadiusAddr: cfg.RadiusListen, SMTPAddr: cfg.SMTPListen,
-			Logs: logSvc, Reports: reportSvc, SyslogServer: cfg.FilePublicIP, Compliance: complianceSvc,
+			Logs: logSvc, Reports: reportSvc, SyslogServer: cfg.FilePublicIP, Compliance: complianceSvc, Policy: policySvc,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
