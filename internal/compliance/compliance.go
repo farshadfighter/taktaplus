@@ -448,16 +448,17 @@ func (s *Service) Evaluate(ctx context.Context, deviceID int64) (*Result, error)
 func (s *Service) store(ctx context.Context, r *Result) error {
 	drift, _ := json.Marshal(r.Drift)
 	viol, _ := json.Marshal(r.Violations)
-	_, err := s.db.Exec(ctx, `INSERT INTO compliance_results (device_id, backup_id, evaluated_at, score, drift, violations, error)
-		VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (device_id) DO UPDATE SET backup_id = EXCLUDED.backup_id,
-		evaluated_at = EXCLUDED.evaluated_at, score = EXCLUDED.score, drift = EXCLUDED.drift, violations = EXCLUDED.violations, error = EXCLUDED.error`,
-		r.DeviceID, r.BackupID, r.EvaluatedAt, r.Score, drift, viol, r.Error)
+	_, err := s.db.Exec(ctx, `INSERT INTO compliance_results (device_id, backup_id, evaluated_at, score, drift, violations, templates, error)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (device_id) DO UPDATE SET backup_id = EXCLUDED.backup_id,
+		evaluated_at = EXCLUDED.evaluated_at, score = EXCLUDED.score, drift = EXCLUDED.drift, violations = EXCLUDED.violations,
+		templates = EXCLUDED.templates, error = EXCLUDED.error`,
+		r.DeviceID, r.BackupID, r.EvaluatedAt, r.Score, drift, viol, r.Templates, r.Error)
 	return err
 }
 
 // Results returns the latest result of every device, worst first.
 func (s *Service) Results(ctx context.Context) ([]*Result, error) {
-	rows, err := s.db.Query(ctx, `SELECT r.device_id, d.name, d.kind, r.backup_id, r.evaluated_at, r.score, r.drift, r.violations, r.error
+	rows, err := s.db.Query(ctx, `SELECT r.device_id, d.name, d.kind, r.backup_id, r.evaluated_at, r.score, r.drift, r.violations, r.templates, r.error
 		FROM compliance_results r JOIN devices d ON d.id = r.device_id ORDER BY r.error = '' DESC, r.score, lower(d.name)`)
 	if err != nil {
 		return nil, err
@@ -467,11 +468,17 @@ func (s *Service) Results(ctx context.Context) ([]*Result, error) {
 	for rows.Next() {
 		var r Result
 		var drift, viol []byte
-		if err := rows.Scan(&r.DeviceID, &r.DeviceName, &r.Kind, &r.BackupID, &r.EvaluatedAt, &r.Score, &drift, &viol, &r.Error); err != nil {
+		if err := rows.Scan(&r.DeviceID, &r.DeviceName, &r.Kind, &r.BackupID, &r.EvaluatedAt, &r.Score, &drift, &viol, &r.Templates, &r.Error); err != nil {
 			return nil, err
 		}
+		r.Drift, r.Violations = []Drift{}, []Finding{}
 		_ = json.Unmarshal(drift, &r.Drift)
 		_ = json.Unmarshal(viol, &r.Violations)
+		for i := range r.Drift {
+			if r.Drift[i].Differences == nil {
+				r.Drift[i].Differences = []DriftItem{}
+			}
+		}
 		out = append(out, &r)
 	}
 	return out, rows.Err()

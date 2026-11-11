@@ -17,6 +17,8 @@ const ruleKinds: Record<string, { label: string; unit?: string }> = {
   log_silence: { label: 'قطع دریافت لاگ از دستگاه', unit: 'دقیقه' },
   log_attacks: { label: 'حمله‌ی پرتکرار از یک مبدأ (IPS/WAF)', unit: 'حمله' },
   vpn_failures: { label: 'ورود ناموفق مکرر VPN', unit: 'تلاش' },
+  compliance_score: { label: 'امتیاز انطباق کمتر از هدف', unit: 'امتیاز' },
+  config_drift: { label: 'انحراف کانفیگ از قالب' },
 }
 
 const windowed = (k?: string) => k === 'log_attacks' || k === 'vpn_failures'
@@ -47,7 +49,7 @@ function RuleModal({ rule, onClose, groups, channels }: { rule: Partial<Rule> | 
         <Form.Item name="name" label="نام" rules={[{ required: true, message: 'نام قانون' }]}><Input /></Form.Item>
         <Form.Item name="kind" label="شرط"><Select options={Object.entries(ruleKinds).map(([value, k]) => ({ value, label: k.label }))} /></Form.Item>
         <Space size={16} wrap>
-          {kind !== 'offline' && (
+          {kind !== 'offline' && kind !== 'config_drift' && (
             <Form.Item name="threshold" label={`آستانه (${ruleKinds[kind]?.unit ?? ''})`}><InputNumber min={0} max={kind?.startsWith('log_') || kind === 'vpn_failures' ? 1000000 : 365} /></Form.Item>
           )}
           {windowed(kind) && (
@@ -201,7 +203,7 @@ export default function Alerts() {
                 columns={[
                   { title: 'نام', dataIndex: 'name' },
                   { title: 'شرط', render: (_, r) => ruleKinds[r.kind]?.label ?? r.kind },
-                  { title: 'آستانه', render: (_, r) => (r.kind === 'offline' ? '—' : `${faNum(r.threshold)} ${ruleKinds[r.kind]?.unit ?? ''}`) },
+                  { title: 'آستانه', render: (_, r) => (r.kind === 'offline' || r.kind === 'config_drift' ? '—' : `${faNum(r.threshold)} ${ruleKinds[r.kind]?.unit ?? ''}`) },
                   { title: 'مدت', render: (_, r) => (windowed(r.kind) ? `در ${faNum(r.window_minutes)} دقیقه` : r.duration_minutes ? `${faNum(r.duration_minutes)} دقیقه` : 'فوری') },
                   { title: 'شدت', render: (_, r) => severityTag(r.severity) },
                   { title: 'کانال‌ها', render: (_, r) => (r.channel_ids.length ? faNum(r.channel_ids.length) : <Typography.Text type="secondary">فقط پنل</Typography.Text>) },

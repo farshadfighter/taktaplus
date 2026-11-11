@@ -41,6 +41,7 @@ function NavMenu({ onNavigate, openAlerts, pending }: { onNavigate?: () => void;
         link('/deploy', 'استقرار سیگنیچر'),
         link('/firmware', 'ارتقای فرم‌ور'),
         link('/scripts', 'اسکریپت‌ها'),
+        link('/compliance', 'قالب و انطباق'),
         link('/packages', 'پکیج‌ها و منابع'),
         link('/maintenance', 'پنجره‌ها و تأیید'),
       ],

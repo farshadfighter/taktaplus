@@ -37,6 +37,7 @@ CREATE TABLE compliance_results (
     score        integer NOT NULL,
     drift        jsonb NOT NULL DEFAULT '[]',
     violations   jsonb NOT NULL DEFAULT '[]',
+    templates    text[] NOT NULL DEFAULT '{}', -- templates that apply to the device
     error        text NOT NULL DEFAULT ''
 );
 
