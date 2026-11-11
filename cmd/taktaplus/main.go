@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,8 +19,10 @@ import (
 	"syscall"
 	"text/tabwriter"
 	"time"
+	_ "time/tzdata" // report schedules use named time zones in a minimal image
 
 	"github.com/farshadfighter/taktaplus-lic/pkg/licformat"
+	"github.com/farshadfighter/taktaplus-lic/pkg/manifest"
 	"github.com/farshadfighter/taktaplus/internal/alerts"
 
 	"github.com/farshadfighter/taktaplus/internal/api"
@@ -27,16 +30,19 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/backup"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus/internal/changes"
+	"github.com/farshadfighter/taktaplus/internal/chstore"
 	"github.com/farshadfighter/taktaplus/internal/config"
 	"github.com/farshadfighter/taktaplus/internal/deploy"
 	"github.com/farshadfighter/taktaplus/internal/device"
 	"github.com/farshadfighter/taktaplus/internal/fileserver"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
+	"github.com/farshadfighter/taktaplus/internal/logs"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
 	"github.com/farshadfighter/taktaplus/internal/otp"
 	"github.com/farshadfighter/taktaplus/internal/packages"
 	"github.com/farshadfighter/taktaplus/internal/radiussrv"
+	"github.com/farshadfighter/taktaplus/internal/reports"
 	"github.com/farshadfighter/taktaplus/internal/scripts"
 	"github.com/farshadfighter/taktaplus/internal/settings"
 	"github.com/farshadfighter/taktaplus/internal/sms"
@@ -48,7 +54,7 @@ import (
 
 type service struct {
 	summary string
-	phase   int // non-zero: planned for that phase, not implemented yet
+	inAPI   bool // runs inside the api service in this version
 	run     func(ctx context.Context, cfg config.Config, log *slog.Logger) error
 }
 
@@ -58,11 +64,11 @@ var services = map[string]service{
 	"api":          {summary: "web UI and REST API", run: runAPI},
 	"migrate":      {summary: "apply database migrations and exit", run: runMigrate},
 	"create-admin": {summary: "create a superadmin: create-admin -username U [-name N]", run: runCreateAdmin},
-	"worker":       {summary: "background jobs and schedules", phase: 1},
-	"fileserver":   {summary: "built-in TFTP/FTP server", phase: 2},
-	"radius":       {summary: "RADIUS server for SMS two-factor", phase: 3},
-	"smtpgw":       {summary: "email-to-SMS gateway", phase: 3},
-	"collector":    {summary: "syslog collector", phase: 4},
+	"worker":       {summary: "background jobs and schedules (runs inside api)", inAPI: true},
+	"fileserver":   {summary: "built-in TFTP/FTP server (runs inside api)", inAPI: true},
+	"radius":       {summary: "RADIUS server for SMS two-factor (runs inside api)", inAPI: true},
+	"smtpgw":       {summary: "email-to-SMS gateway (runs inside api)", inAPI: true},
+	"collector":    {summary: "syslog collector (runs inside api)", inAPI: true},
 	"version":      {summary: "print the version"},
 }
 
@@ -90,8 +96,8 @@ func main() {
 		fmt.Println(buildinfo.String())
 		return
 	}
-	if svc.phase != 0 {
-		fmt.Fprintf(os.Stderr, "taktaplus %s: not implemented yet (planned for phase %d)\n", name, svc.phase)
+	if svc.inAPI {
+		fmt.Fprintf(os.Stderr, "taktaplus %s: runs inside the api service in this version\n", name)
 		os.Exit(1)
 	}
 
@@ -224,6 +230,47 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
 		return err
 	}
+	var cert tls.Certificate
+	if cfg.TLSCert != "" {
+		cert, err = tlscert.Load(cfg.TLSCert, cfg.TLSKey)
+	} else if cfg.TLS == "on" || cfg.SyslogTLS != "" {
+		cert, err = tlscert.SelfSigned(filepath.Join(cfg.DataDir, "tls"))
+	}
+	if err != nil {
+		return fmt.Errorf("TLS certificate: %w", err)
+	}
+
+	var ch *chstore.Client
+	if cfg.ClickHouseURL != "" {
+		if ch, err = openClickHouse(ctx, cfg.ClickHouseURL, log); err != nil {
+			return err
+		}
+	} else {
+		log.Warn("TAKTAPLUS_CLICKHOUSE_URL is not set; log collection and reports are disabled")
+	}
+	geo := logs.NewGeoIP(filepath.Join(cfg.DataDir, "geoip"))
+	logSvc := logs.New(ch, store, inv, geo, log.With("component", "logs"))
+	if err := logSvc.Load(ctx); err != nil {
+		return fmt.Errorf("log settings: %w", err)
+	}
+	if col := logSvc.Collector(); col != nil {
+		l := logs.Listeners{UDP: cfg.SyslogUDP, TCP: cfg.SyslogTCP, TLS: cfg.SyslogTLS}
+		if l.TLS != "" {
+			l.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		}
+		if err := col.Start(ctx, l); err != nil {
+			return fmt.Errorf("syslog collector: %w", err)
+		}
+		defer col.Close()
+		log.Info("syslog collector listening", "addrs", col.Addrs())
+	}
+	go syncGeoIP(ctx, geo, pkgs, log)
+	reportSvc := reports.New(pool, logSvc, alertSvc, inv, log.With("component", "reports"), reports.Options{
+		Dir: filepath.Join(cfg.DataDir, "reports"), TmpDir: tmpDir, Chromium: cfg.Chromium, Location: cfg.TimeZone})
+	if err := reportSvc.RecoverRuns(ctx); err != nil {
+		return err
+	}
+	go reportSvc.Scheduler(ctx)
 
 	srv := &http.Server{
 		Addr: cfg.Listen,
@@ -232,19 +279,11 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 			Inventory: inv, Alerts: alertSvc, Monitor: mon, Backups: backups, Packages: pkgs, TmpDir: tmpDir,
 			Changes: changeSvc, Scripts: scriptSvc, Firmware: firmware,
 			OTP: otpSvc, SMS: smsSvc, Radius: radiusSrv, Gateway: gateway, RadiusAddr: cfg.RadiusListen, SMTPAddr: cfg.SMTPListen,
+			Logs: logSvc, Reports: reportSvc, SyslogServer: cfg.FilePublicIP,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	if cfg.TLS == "on" {
-		var cert tls.Certificate
-		if cfg.TLSCert != "" {
-			cert, err = tlscert.Load(cfg.TLSCert, cfg.TLSKey)
-		} else {
-			cert, err = tlscert.SelfSigned(filepath.Join(cfg.DataDir, "tls"))
-		}
-		if err != nil {
-			return fmt.Errorf("TLS certificate: %w", err)
-		}
 		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 	}
 	errCh := make(chan error, 1)
@@ -269,6 +308,62 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		return srv.Shutdown(shutdownCtx)
 	}
 	return nil
+}
+
+// openClickHouse waits up to a minute for the log store (it may start after
+// us) and applies its migrations.
+func openClickHouse(ctx context.Context, url string, log *slog.Logger) (*chstore.Client, error) {
+	deadline := time.Now().Add(time.Minute)
+	for {
+		ch, err := chstore.Open(ctx, url)
+		if err == nil {
+			if err := ch.Migrate(ctx, log); err != nil {
+				return nil, err
+			}
+			return ch, nil
+		}
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			return nil, err
+		}
+		log.Warn("waiting for the log store", "err", err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
+// syncGeoIP installs the newest country database from the package
+// repository, hourly.
+func syncGeoIP(ctx context.Context, geo *logs.GeoIP, pkgs *packages.Service, log *slog.Logger) {
+	latest := func(ctx context.Context) (*logs.RepoPackage, error) {
+		list, err := pkgs.List(ctx, packages.Filter{Type: logs.GeoPackageType})
+		if err != nil {
+			return nil, err
+		}
+		var best *packages.Package
+		for _, p := range list {
+			if best == nil || manifest.CompareVersions(p.Version, best.Version) > 0 {
+				best = p
+			}
+		}
+		if best == nil {
+			return nil, nil
+		}
+		sha := best.SHA256
+		return &logs.RepoPackage{SHA256: sha, Version: best.Version, Open: func() (io.ReadCloser, error) { return pkgs.Open(sha) }}, nil
+	}
+	for {
+		if err := geo.SyncFromRepo(ctx, latest); err != nil && ctx.Err() == nil {
+			log.Warn("updating the country database from the package repository", "err", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Hour):
+		}
+	}
 }
 
 // runCreateAdmin creates a superadmin. The password comes from

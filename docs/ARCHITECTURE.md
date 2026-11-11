@@ -32,6 +32,9 @@ TaktaPlus یک نرم‌افزار **On-Premise تحت وب** برای مدیر�
 | روش 2FA | هر دو: سرور RADIUS، و دروازه‌ی ایمیل‌به‌پیامک برای کاربران Local فورتی‌گیت |
 | سرویس پیامک | sms.ir |
 | کانال هشدار | ایمیل، پیامک، پیام‌رسان داخلی (بله/ایتا)، Syslog/Webhook |
+| نگهداری لاگ (E) | پیش‌فرض ۹۰ روز لاگ خام و ۱ سال خلاصه‌های ساعتی؛ قابل تغییر در پنل |
+| کشور مبدأ/مقصد (E) | فیلد کشور خود لاگ فورتی‌گیت؛ در غیر این صورت پایگاه MMDB آفلاین که از مخزن مرکزی بروز می‌شود |
+| گزارش ماهانه | بر اساس ماه شمسی |
 | ارتباط با دستگاه | REST API و SSH (هر دو) |
 | زبان | Backend: Go — Frontend: React + TypeScript |
 | ریپازیتوری | Public می‌ماند؛ هیچ کلید خصوصی یا Secret وارد ریپازیتوری نمی‌شود |
@@ -306,7 +309,7 @@ FortiGate ──SMTP: to 0912xxxxxxx@sms.taktaplus──▶ TaktaPlus smtpgw ─
 - **دریافت:** FortiGate/FortiWeb با Syslog (ترجیحاً TCP یا TLS، فرمت `default`) به collector می‌فرستند. پیکربندی Syslog روی دستگاه از پنل اعمال می‌شود.
 - لاگ‌های سریال‌های بدون لایسنس (فیلد `devid`) دور ریخته و شمارش می‌شوند.
 - **Parser:** تبدیل `key=value` فورتی به رکورد ساختاریافته؛ درج دسته‌ای (Batch) در ClickHouse.
-- **جداول ClickHouse:** `log_traffic`، `log_utm` (IPS، AV، WebFilter، AppCtrl، DNS)، `log_event` (سیستم، VPN، کاربر، HA، تغییر کانفیگ)، `log_fortiweb_attack`، `log_fortiweb_traffic`، `device_metrics`. پارتیشن روزانه، TTL قابل تنظیم برای هر جدول، و Materialized View برای تجمیع ساعتی/روزانه.
+- **جداول ClickHouse:** `log_traffic` (ترافیک FortiGate و FortiWeb)، `log_threat` (IPS، AV، WebFilter، AppCtrl، DNS و …)، `log_event` (سیستم، VPN، کاربر، HA، تغییر کانفیگ)، `log_waf` (حملات FortiWeb)، همه با نگه‌داشتن کل کلیدهای لاگ در `fields`. پارتیشن روزانه، TTL قابل تنظیم، و Materialized View برای خلاصه‌های ساعتی (`r_*`) که داشبوردها و گزارش‌ها از آن‌ها می‌خوانند.
 - **داشبوردها:** خلاصه‌ی امنیتی، Top Source / Destination / Application / Country، پهنای باند، تهدیدها، WebFilter، کاربران و نشست‌های VPN، رویدادهای سیستمی، حملات WAF.
 - **Log View:** جستجو و فیلتر با بازه‌ی زمانی، Drill-down از داشبورد، خروجی CSV.
 - **گزارش‌ها:** قالب‌های آماده + قالب سفارشی (انتخاب ویجت‌ها)، زمان‌بندی روزانه/هفتگی/ماهانه، خروجی PDF و Excel، ارسال ایمیلی.
@@ -455,4 +458,3 @@ TaktaPlus منبع حقیقت Policyها و آبجکت‌های دستگاه‌�
 - فهرست نهایی انواع پکیج سیگنیچر FortiWeb.
 - مجموعه‌ی قوانین انطباق پیش‌فرض (F3) و نسخه‌های FortiOS که Transaction در API دارند (F4).
 - قالب پیامک‌ها در sms.ir.
-- مدت پیش‌فرض نگهداری لاگ و بکاپ.

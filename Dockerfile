@@ -20,10 +20,15 @@ RUN LDFLAGS="-s -w -X github.com/farshadfighter/taktaplus/internal/buildinfo.Ver
     CGO_ENABLED=0 go build -trimpath -ldflags "$LDFLAGS" -o /out/taktaplus ./cmd/taktaplus && \
     mkdir -p /data-skel
 
-FROM gcr.io/distroless/static-debian12:nonroot
+# Alpine rather than distroless: PDF reports are printed with headless
+# Chromium, which needs its shared libraries and fonts.
+FROM alpine:3.20
+RUN apk add --no-cache chromium ca-certificates && \
+    addgroup -S -g 65532 nonroot && adduser -S -D -H -u 65532 -G nonroot nonroot
 COPY --from=build /out/ /usr/local/bin/
-# Owned by the distroless "nonroot" user so a fresh named volume is writable.
+# Owned by the "nonroot" user so a fresh named volume is writable.
 COPY --from=build --chown=65532:65532 /data-skel /var/lib/taktaplus
+USER 65532:65532
 VOLUME /var/lib/taktaplus
 EXPOSE 8443
 ENTRYPOINT ["/usr/local/bin/taktaplus"]

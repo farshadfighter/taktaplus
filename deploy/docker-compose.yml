@@ -28,7 +28,7 @@ services:
     volumes:
       - redisdata:/data
 
-  # Logs and metrics (phase 4).
+  # Log store for module E (dashboards, log viewer, reports).
   clickhouse:
     image: clickhouse/clickhouse-server:24.8-alpine
     environment:
@@ -42,12 +42,18 @@ services:
       - chdata:/var/lib/clickhouse
     ulimits:
       nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      retries: 20
 
   api:
     build: ..
     command: ["api"]
     depends_on:
       postgres:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
     environment:
       TAKTAPLUS_LISTEN: ":8443"
@@ -63,6 +69,10 @@ services:
       # Built-in file server that devices pull packages and firmware from.
       TAKTAPLUS_FILESERVER_IP: ${TAKTAPLUS_FILESERVER_IP:?set TAKTAPLUS_FILESERVER_IP to the address devices use to reach this server}
       TAKTAPLUS_FTP_PUBLIC_PORT: "21"
+      # Log store; devices send syslog to TAKTAPLUS_FILESERVER_IP on 514 (UDP/TCP) or 6514 (TLS).
+      TAKTAPLUS_CLICKHOUSE_URL: http://taktaplus:${TAKTAPLUS_CH_PASSWORD:-taktaplus}@clickhouse:8123/taktaplus
+      # Time zone of report schedules and dates.
+      TAKTAPLUS_TIMEZONE: ${TAKTAPLUS_TIMEZONE:-Asia/Tehran}
     ports:
       - "443:8443"
       - "69:6969/udp"
@@ -70,6 +80,9 @@ services:
       - "30000-30009:30000-30009"
       - "1812:1812/udp"   # RADIUS for SMS two-factor
       - "25:2525"         # email-to-SMS gateway
+      - "514:5514/udp"    # syslog from devices
+      - "514:5514"
+      - "6514:6514"       # syslog over TLS
     volumes:
       - data:/var/lib/taktaplus
       # Host identifiers for the license fingerprint (read-only).

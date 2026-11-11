@@ -11,6 +11,7 @@ import (
 
 	"github.com/farshadfighter/taktaplus/internal/changes"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
+	"github.com/farshadfighter/taktaplus/internal/logs"
 	"github.com/farshadfighter/taktaplus/internal/packages"
 )
 
@@ -46,6 +47,9 @@ func parseSpec(raw json.RawMessage) (*SignatureSpec, error) {
 	if slices.Contains(s.Latest, "firmware") {
 		return nil, invalid("firmware is upgraded with a firmware change, not a signature deployment")
 	}
+	if slices.Contains(s.Latest, logs.GeoPackageType) {
+		return nil, invalid("the country database is used by TaktaPlus itself and is not installed on devices")
+	}
 	return &s, nil
 }
 
@@ -63,6 +67,9 @@ func (r *Signatures) resolve(ctx context.Context, s *SignatureSpec, d *inventory
 		}
 		if p.Type == "firmware" {
 			return nil, invalid("firmware is upgraded with a firmware change, not a signature deployment")
+		}
+		if p.Type == logs.GeoPackageType {
+			return nil, invalid("the country database is used by TaktaPlus itself and is not installed on devices")
 		}
 		if p.Compatible(string(d.Kind), d.Model, d.Firmware) {
 			out = append(out, p)

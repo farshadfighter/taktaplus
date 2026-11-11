@@ -23,10 +23,12 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/deploy"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
+	"github.com/farshadfighter/taktaplus/internal/logs"
 	"github.com/farshadfighter/taktaplus/internal/monitor"
 	"github.com/farshadfighter/taktaplus/internal/otp"
 	"github.com/farshadfighter/taktaplus/internal/packages"
 	"github.com/farshadfighter/taktaplus/internal/radiussrv"
+	"github.com/farshadfighter/taktaplus/internal/reports"
 	"github.com/farshadfighter/taktaplus/internal/scripts"
 	"github.com/farshadfighter/taktaplus/internal/sms"
 	"github.com/farshadfighter/taktaplus/internal/smtpgw"
@@ -55,6 +57,9 @@ type Deps struct {
 	Gateway      *smtpgw.Gateway
 	RadiusAddr   string // for display
 	SMTPAddr     string
+	Logs         *logs.Service
+	Reports      *reports.Service
+	SyslogServer string // address devices send logs to, suggested in the UI
 }
 
 type srv struct {
@@ -78,6 +83,9 @@ type srv struct {
 	smtpgw       *smtpgw.Gateway
 	radiusAddr   string
 	smtpAddr     string
+	logs         *logs.Service
+	reports      *reports.Service
+	syslogServer string
 }
 
 // New returns the root HTTP handler.
@@ -85,7 +93,8 @@ func New(d Deps) http.Handler {
 	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.License, cookieSecure: d.CookieSecure,
 		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups, pkgs: d.Packages, tmpDir: d.TmpDir,
 		changes: d.Changes, scripts: d.Scripts, firmware: d.Firmware,
-		otp: d.OTP, sms: d.SMS, radius: d.Radius, smtpgw: d.Gateway, radiusAddr: d.RadiusAddr, smtpAddr: d.SMTPAddr}
+		otp: d.OTP, sms: d.SMS, radius: d.Radius, smtpgw: d.Gateway, radiusAddr: d.RadiusAddr, smtpAddr: d.SMTPAddr,
+		logs: d.Logs, reports: d.Reports, syslogServer: d.SyslogServer}
 	if s.tmpDir == "" {
 		s.tmpDir = os.TempDir()
 	}
@@ -117,6 +126,12 @@ func New(d Deps) http.Handler {
 			pm := requirePerm(auth.PermPackages)
 			r.With(pm).Post("/packages/upload", s.uploadPackage)
 			r.With(pm).Post("/packages/bundle", s.importBundle)
+			r.With(requirePerm(auth.PermLogsManage)).Post("/logs/geoip", s.uploadGeoIP)
+			// Exports and dashboards over long periods can take a while.
+			lr := requirePerm(auth.PermLogsRead)
+			r.With(lr).Get("/logs/export.csv", s.logExport)
+			r.With(lr).Get("/logs/dashboard", s.logDashboard)
+			r.With(lr).Get("/reports/runs/{id}/files/{format}", s.downloadReport)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -248,6 +263,29 @@ func New(d Deps) http.Handler {
 			r.With(om).Get("/otp/fortigate-config", s.fortigateOTPConfig)
 			r.With(read).Get("/otp/gateway/users", s.gatewayUsers)
 			r.With(om).Post("/otp/gateway/sync", s.gatewaySync)
+
+			lr := requirePerm(auth.PermLogsRead)
+			logm := requirePerm(auth.PermLogsManage)
+			rm := requirePerm(auth.PermReports)
+			r.With(lr).Get("/logs/status", s.logStatus)
+			r.With(logm).Put("/logs/settings", s.saveLogSettings)
+			r.With(lr).Get("/logs/catalog", s.logCatalog)
+			r.With(lr).Get("/logs/search", s.logSearch)
+			r.With(lr).Post("/logs/syslog-config", s.syslogConfig)
+			r.With(requirePerm(auth.PermChangeCreate)).Post("/logs/syslog-script", s.syslogScript)
+			r.With(lr).Get("/reports/templates", s.listReportTemplates)
+			r.With(rm).Post("/reports/templates", s.saveReportTemplate)
+			r.With(rm).Put("/reports/templates/{id}", s.saveReportTemplate)
+			r.With(rm).Delete("/reports/templates/{id}", s.deleteReportTemplate)
+			r.With(lr).Get("/reports/schedules", s.listReportSchedules)
+			r.With(rm).Post("/reports/schedules", s.saveReportSchedule)
+			r.With(rm).Put("/reports/schedules/{id}", s.saveReportSchedule)
+			r.With(rm).Delete("/reports/schedules/{id}", s.deleteReportSchedule)
+			r.With(rm).Get("/reports/channels", s.reportChannels)
+			r.With(lr).Get("/reports/runs", s.listReportRuns)
+			r.With(lr).Post("/reports/runs", s.startReport)
+			r.With(rm).Post("/reports/runs/{id}/retry", s.retryReport)
+			r.With(rm).Delete("/reports/runs/{id}", s.deleteReport)
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

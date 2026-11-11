@@ -129,12 +129,14 @@ type Service struct {
 	guard *license.Guard
 	log   *slog.Logger
 	send  sender
-	now   func() time.Time
+	// mailer sends report emails; tests replace it.
+	mailer func(ctx context.Context, c ChannelConfig, to []string, subject, body string, files []Attachment, at time.Time) error
+	now    func() time.Time
 }
 
 // New returns the alert service.
 func New(db *pgxpool.Pool, box *secretbox.Box, inv *inventory.Service, guard *license.Guard, log *slog.Logger) *Service {
-	return &Service{db: db, box: box, inv: inv, guard: guard, log: log, send: send, now: time.Now}
+	return &Service{db: db, box: box, inv: inv, guard: guard, log: log, send: send, mailer: sendMail, now: time.Now}
 }
 
 // --- rules ---
@@ -285,6 +287,39 @@ func (s *Service) TestChannel(ctx context.Context, id int64) error {
 	return s.send(ctx, list[0].Kind, list[0].Config, Message{
 		Event: "test", Severity: "info", Rule: "Test", Device: "TaktaPlus", Text: "This is a test notification from TaktaPlus.", At: s.now(),
 	})
+}
+
+// EmailChannels lists the enabled email channels (for report delivery).
+func (s *Service) EmailChannels(ctx context.Context) ([]Channel, error) {
+	list, err := s.loadChannels(ctx, "WHERE kind = $1 AND enabled", ChannelEmail)
+	for i := range list {
+		list[i].Config = list[i].Config.redacted()
+	}
+	return list, err
+}
+
+// SendMail sends an email with attachments through an email channel, to
+// the given recipients or, when none are given, the channel's own.
+func (s *Service) SendMail(ctx context.Context, channelID int64, to []string, subject, body string, files []Attachment) error {
+	list, err := s.loadChannels(ctx, "WHERE id = $1 AND kind = $2", channelID, ChannelEmail)
+	if err != nil {
+		return err
+	}
+	if len(list) == 0 {
+		return ErrNotFound
+	}
+	c := list[0].Config
+	if len(to) == 0 {
+		to = c.To
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	return s.mailer(ctx, c, to, subject, body, files, s.now())
+}
+
+// SetMailer replaces email delivery (for tests of other packages).
+func (s *Service) SetMailer(f func(ctx context.Context, c ChannelConfig, to []string, subject, body string, files []Attachment, at time.Time) error) {
+	s.mailer = f
 }
 
 // --- alerts ---
