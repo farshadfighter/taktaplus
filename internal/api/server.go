@@ -20,6 +20,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/backup"
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus/internal/changes"
+	"github.com/farshadfighter/taktaplus/internal/compliance"
 	"github.com/farshadfighter/taktaplus/internal/deploy"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
@@ -60,6 +61,7 @@ type Deps struct {
 	Logs         *logs.Service
 	Reports      *reports.Service
 	SyslogServer string // address devices send logs to, suggested in the UI
+	Compliance   *compliance.Service
 }
 
 type srv struct {
@@ -86,6 +88,7 @@ type srv struct {
 	logs         *logs.Service
 	reports      *reports.Service
 	syslogServer string
+	compliance   *compliance.Service
 }
 
 // New returns the root HTTP handler.
@@ -94,7 +97,7 @@ func New(d Deps) http.Handler {
 		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups, pkgs: d.Packages, tmpDir: d.TmpDir,
 		changes: d.Changes, scripts: d.Scripts, firmware: d.Firmware,
 		otp: d.OTP, sms: d.SMS, radius: d.Radius, smtpgw: d.Gateway, radiusAddr: d.RadiusAddr, smtpAddr: d.SMTPAddr,
-		logs: d.Logs, reports: d.Reports, syslogServer: d.SyslogServer}
+		logs: d.Logs, reports: d.Reports, syslogServer: d.SyslogServer, compliance: d.Compliance}
 	if s.tmpDir == "" {
 		s.tmpDir = os.TempDir()
 	}
@@ -286,6 +289,22 @@ func New(d Deps) http.Handler {
 			r.With(lr).Post("/reports/runs", s.startReport)
 			r.With(rm).Post("/reports/runs/{id}/retry", s.retryReport)
 			r.With(rm).Delete("/reports/runs/{id}", s.deleteReport)
+
+			cm := requirePerm(auth.PermCompliance)
+			r.With(read).Get("/compliance", s.complianceOverview)
+			r.With(read).Get("/compliance/devices/{id}", s.complianceDevice)
+			r.With(read).Post("/compliance/evaluate", s.complianceEvaluate)
+			r.With(cm).Post("/compliance/devices/{id}/exceptions", s.addComplianceException)
+			r.With(cm).Delete("/compliance/exceptions/{id}", s.deleteComplianceException)
+			r.With(create).Post("/compliance/devices/{id}/fix", s.fixDrift)
+			r.With(read).Get("/compliance/templates", s.listComplianceTemplates)
+			r.With(cm).Post("/compliance/templates", s.saveComplianceTemplate)
+			r.With(cm).Put("/compliance/templates/{id}", s.saveComplianceTemplate)
+			r.With(cm).Delete("/compliance/templates/{id}", s.deleteComplianceTemplate)
+			r.With(read).Get("/compliance/rules", s.listComplianceRules)
+			r.With(cm).Post("/compliance/rules", s.saveComplianceRule)
+			r.With(cm).Put("/compliance/rules/{id}", s.saveComplianceRule)
+			r.With(cm).Delete("/compliance/rules/{id}", s.deleteComplianceRule)
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

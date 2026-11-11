@@ -322,7 +322,7 @@ func TestDevices(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("channel = %d %v", code, body)
 	}
-	if code, body := h.do("GET", "/api/v1/alert-rules", nil); code != http.StatusOK || len(body["items"].([]any)) != 9 {
+	if code, body := h.do("GET", "/api/v1/alert-rules", nil); code != http.StatusOK || len(body["items"].([]any)) != 11 {
 		t.Fatalf("rules = %d %v", code, body)
 	}
 	if code, _ := h.do("GET", "/api/v1/alerts?state=open", nil); code != http.StatusOK {

@@ -27,6 +27,7 @@ import Analytics from './pages/Analytics'
 import LogView from './pages/LogView'
 import Reports from './pages/Reports'
 import LogSettings from './pages/LogSettings'
+import Compliance from './pages/Compliance'
 
 function Protected() {
   const { user, loading } = useAuth()
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="logs" element={<LogView />} />
           <Route path="logs/settings" element={<LogSettings />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="compliance" element={<Compliance />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

@@ -31,6 +31,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus/internal/changes"
 	"github.com/farshadfighter/taktaplus/internal/chstore"
+	"github.com/farshadfighter/taktaplus/internal/compliance"
 	"github.com/farshadfighter/taktaplus/internal/config"
 	"github.com/farshadfighter/taktaplus/internal/deploy"
 	"github.com/farshadfighter/taktaplus/internal/device"
@@ -268,6 +269,11 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		log.Info("syslog collector listening", "addrs", col.Addrs())
 	}
 	go syncGeoIP(ctx, geo, pkgs, log)
+	complianceSvc := compliance.New(pool, inv, backups, scriptSvc, changeSvc, log.With("component", "compliance"))
+	complianceSvc.RegisterWidgets()
+	backups.OnStored(func(deviceID, _ int64) { complianceSvc.Queue(deviceID) })
+	alertSvc.SetComplianceSource(complianceSvc)
+	go complianceSvc.Run(ctx)
 	reports.RegisterSystemWidgets(pool, inv, guard)
 	reportSvc := reports.New(pool, logSvc, alertSvc, inv, log.With("component", "reports"), reports.Options{
 		Dir: filepath.Join(cfg.DataDir, "reports"), TmpDir: tmpDir, Chromium: cfg.Chromium, Location: cfg.TimeZone})
@@ -283,7 +289,7 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 			Inventory: inv, Alerts: alertSvc, Monitor: mon, Backups: backups, Packages: pkgs, TmpDir: tmpDir,
 			Changes: changeSvc, Scripts: scriptSvc, Firmware: firmware,
 			OTP: otpSvc, SMS: smsSvc, Radius: radiusSrv, Gateway: gateway, RadiusAddr: cfg.RadiusListen, SMTPAddr: cfg.SMTPListen,
-			Logs: logSvc, Reports: reportSvc, SyslogServer: cfg.FilePublicIP,
+			Logs: logSvc, Reports: reportSvc, SyslogServer: cfg.FilePublicIP, Compliance: complianceSvc,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

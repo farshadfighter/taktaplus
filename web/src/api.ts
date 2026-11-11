@@ -510,3 +510,51 @@ export type ReportRun = {
   created_at: string
   finished_at: string | null
 }
+
+// --- compliance (F3) ---
+
+export type Cond = { key: string; op: 'eq' | 'ne' | 'contains' | 'not_contains' | 'gte' | 'lte' | 'set' | 'unset'; value: string; default?: string }
+export type ComplianceRule = {
+  id: number
+  name: string
+  description: string
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  platform: 'fortigate' | 'fortiweb'
+  group_id: number | null
+  section: string
+  scope: 'section' | 'each'
+  match: Cond[]
+  require: Cond[]
+  builtin: boolean
+  enabled: boolean
+}
+export type ComplianceTemplate = {
+  id: number
+  name: string
+  description: string
+  platform: 'fortigate' | 'fortiweb'
+  body: string
+  group_ids: number[]
+  auto_fix: boolean
+  version: number
+  updated_by: string
+  updated_at: string
+}
+export type DriftItem = { path: string; key?: string; expected: string; actual: string; missing?: boolean; excepted: boolean }
+export type Finding = { rule_id: number; rule: string; severity: string; entry: string; detail: string; excepted: boolean }
+export type ComplianceResult = {
+  device_id: number
+  device_name: string
+  kind: string
+  backup_id: number | null
+  evaluated_at: string
+  score: number
+  drift: { template_id: number; template: string; differences: DriftItem[]; error?: string }[]
+  violations: Finding[]
+  error: string
+  templates: string[]
+  drift_templates?: number
+  differences?: number
+  broken_rules?: number
+}
+export type ComplianceException = { id: number; device_id: number; ref: string; reason: string; created_by: string; created_at: string }
