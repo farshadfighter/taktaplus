@@ -79,3 +79,30 @@ func (s *Service) Hits(ctx context.Context, kind string, window time.Duration, m
 	}
 	return out, nil
 }
+
+// PolicyHits counts traffic logs per firewall policy ID on the devices
+// since a time.
+func (s *Service) PolicyHits(ctx context.Context, deviceIDs []int64, since time.Time) (map[int]uint64, error) {
+	if s.ch == nil {
+		return nil, ErrDisabled
+	}
+	devs := make([]uint32, len(deviceIDs))
+	for i, d := range deviceIDs {
+		devs[i] = uint32(d)
+	}
+	type row struct {
+		ID uint32 `json:"policyid"`
+		N  uint64 `json:"n"`
+	}
+	rows, err := chstore.Select[row](ctx, s.ch, `SELECT policyid, count() AS n FROM log_traffic
+		WHERE has({devs:Array(UInt32)}, device_id) AND ts >= {since:DateTime64(3)} AND policyid > 0 GROUP BY policyid`,
+		chstore.Params{"devs": devs, "since": since})
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int]uint64, len(rows))
+	for _, r := range rows {
+		out[int(r.ID)] = r.N
+	}
+	return out, nil
+}
