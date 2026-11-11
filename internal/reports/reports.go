@@ -283,7 +283,7 @@ func (sc *Schedule) normalize() error {
 	}
 	sc.Recipients = rcpt
 	if len(sc.Recipients) > 0 && sc.ChannelID == nil {
-		return invalidf("choose the email channel that sends the report")
+		return invalidf("choose the channel that sends the report")
 	}
 	if sc.DeviceIDs == nil {
 		sc.DeviceIDs = []int64{}
@@ -615,7 +615,7 @@ func (s *Service) generate(ctx context.Context, r *Run, t *Template, sc *Schedul
 	subject := fmt.Sprintf("[TaktaPlus] %s — %s", t.Name, FaDate(doc.To.Add(-time.Second)))
 	body := fmt.Sprintf("گزارش «%s»\nبازه: %s تا %s\nدامنه: %s\n\nفایل گزارش پیوست شده است.\n— TaktaPlus\n",
 		t.Name, FaDateTime(doc.From), FaDateTime(doc.To), doc.Scope)
-	if err := s.alerts.SendMail(ctx, *sc.ChannelID, sc.Recipients, subject, body, attachments); err != nil {
+	if err := s.alerts.Deliver(ctx, *sc.ChannelID, sc.Recipients, subject, body, attachments); err != nil {
 		s.finish(ctx, r, StatusFailed, "email: "+err.Error())
 		return
 	}

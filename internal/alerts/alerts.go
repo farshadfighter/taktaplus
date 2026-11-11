@@ -33,9 +33,29 @@ const (
 	KindDisk           = "disk"
 	KindContractExpiry = "contract_expiry"
 	KindLicenseExpiry  = "license_expiry"
+	// Rules over the log store.
+	KindLogSilence  = "log_silence"  // threshold: minutes without logs
+	KindLogAttacks  = "log_attacks"  // threshold: attacks from one source within the window
+	KindVPNFailures = "vpn_failures" // threshold: failed VPN logins of one user and address within the window
 )
 
-var kinds = []string{KindOffline, KindCPU, KindMem, KindDisk, KindContractExpiry, KindLicenseExpiry}
+var kinds = []string{KindOffline, KindCPU, KindMem, KindDisk, KindContractExpiry, KindLicenseExpiry, KindLogSilence, KindLogAttacks, KindVPNFailures}
+
+// LogHit is one source that crossed a log rule's threshold.
+type LogHit struct {
+	Subject string // what the alert is about: an address, or user @ address
+	Count   uint64
+	Detail  string // e.g. the most frequent attack
+}
+
+// LogSource answers the log rules; the log module implements it.
+type LogSource interface {
+	LastSeen(ctx context.Context) (map[int64]time.Time, error)
+	Hits(ctx context.Context, kind string, window time.Duration, min int) (map[int64][]LogHit, error)
+}
+
+// SetLogSource enables the log rules.
+func (s *Service) SetLogSource(ls LogSource) { s.logs = ls }
 
 // InputError is a validation failure to show to the user.
 type InputError struct{ msg string }
@@ -59,6 +79,7 @@ type Rule struct {
 	ChannelIDs      []int64 `json:"channel_ids"`
 	RepeatMinutes   int     `json:"repeat_minutes"`
 	Enabled         bool    `json:"enabled"`
+	WindowMinutes   int     `json:"window_minutes"`
 }
 
 func (r *Rule) validate() error {
@@ -83,6 +104,17 @@ func (r *Rule) validate() error {
 	case KindContractExpiry, KindLicenseExpiry:
 		if r.Threshold < 0 || r.Threshold > 365 {
 			return invalidf("threshold must be between 0 and 365 days")
+		}
+	case KindLogSilence:
+		if r.Threshold < 5 || r.Threshold > 10080 {
+			return invalidf("threshold must be 5 to 10080 minutes")
+		}
+	case KindLogAttacks, KindVPNFailures:
+		if r.Threshold < 1 || r.Threshold > 1e6 {
+			return invalidf("threshold must be a positive count")
+		}
+		if r.WindowMinutes < 1 || r.WindowMinutes > 1440 {
+			return invalidf("window must be 1 to 1440 minutes")
 		}
 	}
 	if r.DurationMinutes < 0 || r.DurationMinutes > 1440 || r.RepeatMinutes < 0 || r.RepeatMinutes > 10080 {
@@ -129,21 +161,23 @@ type Service struct {
 	guard *license.Guard
 	log   *slog.Logger
 	send  sender
+	logs  LogSource
 	// mailer sends report emails; tests replace it.
-	mailer func(ctx context.Context, c ChannelConfig, to []string, subject, body string, files []Attachment, at time.Time) error
-	now    func() time.Time
+	mailer    func(ctx context.Context, c ChannelConfig, to []string, subject, body string, files []Attachment, at time.Time) error
+	messenger func(ctx context.Context, kind string, c ChannelConfig, text string, files []Attachment) error
+	now       func() time.Time
 }
 
 // New returns the alert service.
 func New(db *pgxpool.Pool, box *secretbox.Box, inv *inventory.Service, guard *license.Guard, log *slog.Logger) *Service {
-	return &Service{db: db, box: box, inv: inv, guard: guard, log: log, send: send, mailer: sendMail, now: time.Now}
+	return &Service{db: db, box: box, inv: inv, guard: guard, log: log, send: send, mailer: sendMail, messenger: sendMessenger, now: time.Now}
 }
 
 // --- rules ---
 
 // ListRules returns all rules.
 func (s *Service) ListRules(ctx context.Context) ([]Rule, error) {
-	rows, err := s.db.Query(ctx, `SELECT id, name, kind, threshold, duration_minutes, severity, group_id, channel_ids, repeat_minutes, enabled
+	rows, err := s.db.Query(ctx, `SELECT id, name, kind, threshold, duration_minutes, severity, group_id, channel_ids, repeat_minutes, enabled, window_minutes
 		FROM alert_rules ORDER BY id`)
 	if err != nil {
 		return nil, err
@@ -157,14 +191,14 @@ func (s *Service) SaveRule(ctx context.Context, r Rule) (int64, error) {
 		return 0, err
 	}
 	if r.ID == 0 {
-		err := s.db.QueryRow(ctx, `INSERT INTO alert_rules (name, kind, threshold, duration_minutes, severity, group_id, channel_ids, repeat_minutes, enabled)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-			r.Name, r.Kind, r.Threshold, r.DurationMinutes, r.Severity, r.GroupID, r.ChannelIDs, r.RepeatMinutes, r.Enabled).Scan(&r.ID)
+		err := s.db.QueryRow(ctx, `INSERT INTO alert_rules (name, kind, threshold, duration_minutes, severity, group_id, channel_ids, repeat_minutes, enabled, window_minutes)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+			r.Name, r.Kind, r.Threshold, r.DurationMinutes, r.Severity, r.GroupID, r.ChannelIDs, r.RepeatMinutes, r.Enabled, r.WindowMinutes).Scan(&r.ID)
 		return r.ID, err
 	}
 	tag, err := s.db.Exec(ctx, `UPDATE alert_rules SET name = $2, kind = $3, threshold = $4, duration_minutes = $5, severity = $6,
-		group_id = $7, channel_ids = $8, repeat_minutes = $9, enabled = $10 WHERE id = $1`,
-		r.ID, r.Name, r.Kind, r.Threshold, r.DurationMinutes, r.Severity, r.GroupID, r.ChannelIDs, r.RepeatMinutes, r.Enabled)
+		group_id = $7, channel_ids = $8, repeat_minutes = $9, enabled = $10, window_minutes = $11 WHERE id = $1`,
+		r.ID, r.Name, r.Kind, r.Threshold, r.DurationMinutes, r.Severity, r.GroupID, r.ChannelIDs, r.RepeatMinutes, r.Enabled, r.WindowMinutes)
 	if err == nil && tag.RowsAffected() == 0 {
 		return 0, ErrNotFound
 	}
@@ -237,6 +271,9 @@ func (s *Service) SaveChannel(ctx context.Context, c Channel) (int64, error) {
 		if c.Config.Secret == "" || c.Config.Secret == "********" {
 			c.Config.Secret = old[0].Config.Secret
 		}
+		if c.Config.BotToken == "" || c.Config.BotToken == "********" {
+			c.Config.BotToken = old[0].Config.BotToken
+		}
 	}
 	if err := c.Config.validate(c.Kind); err != nil {
 		return 0, err
@@ -289,32 +326,40 @@ func (s *Service) TestChannel(ctx context.Context, id int64) error {
 	})
 }
 
-// EmailChannels lists the enabled email channels (for report delivery).
-func (s *Service) EmailChannels(ctx context.Context) ([]Channel, error) {
-	list, err := s.loadChannels(ctx, "WHERE kind = $1 AND enabled", ChannelEmail)
+// ReportChannels lists the enabled channels that can carry report files:
+// email and the messenger bots.
+func (s *Service) ReportChannels(ctx context.Context) ([]Channel, error) {
+	list, err := s.loadChannels(ctx, "WHERE kind = ANY($1) AND enabled", []string{ChannelEmail, ChannelBale, ChannelEitaa})
 	for i := range list {
 		list[i].Config = list[i].Config.redacted()
 	}
 	return list, err
 }
 
-// SendMail sends an email with attachments through an email channel, to
-// the given recipients or, when none are given, the channel's own.
-func (s *Service) SendMail(ctx context.Context, channelID int64, to []string, subject, body string, files []Attachment) error {
-	list, err := s.loadChannels(ctx, "WHERE id = $1 AND kind = $2", channelID, ChannelEmail)
+// Deliver sends a message with files through a report channel. Email goes
+// to the given recipients or, when none are given, the channel's own;
+// messenger bots post to their chat.
+func (s *Service) Deliver(ctx context.Context, channelID int64, to []string, subject, body string, files []Attachment) error {
+	list, err := s.loadChannels(ctx, "WHERE id = $1", channelID)
 	if err != nil {
 		return err
 	}
 	if len(list) == 0 {
 		return ErrNotFound
 	}
-	c := list[0].Config
-	if len(to) == 0 {
-		to = c.To
-	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ch := list[0]
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
-	return s.mailer(ctx, c, to, subject, body, files, s.now())
+	switch ch.Kind {
+	case ChannelEmail:
+		if len(to) == 0 {
+			to = ch.Config.To
+		}
+		return s.mailer(ctx, ch.Config, to, subject, body, files, s.now())
+	case ChannelBale, ChannelEitaa:
+		return s.messenger(ctx, ch.Kind, ch.Config, subject+"\n\n"+body, files)
+	}
+	return fmt.Errorf("channel %q cannot carry reports", ch.Name)
 }
 
 // SetMailer replaces email delivery (for tests of other packages).
@@ -377,7 +422,40 @@ type condition struct {
 	message string
 }
 
-func (s *Service) conditions(r Rule, d *inventory.Device, st *inventory.Status, lic *licformat.License, now time.Time) []condition {
+// logFacts are the log store answers for one evaluation.
+type logFacts struct {
+	lastSeen map[int64]time.Time
+	hits     map[int64]map[int64][]LogHit // by rule, then device
+}
+
+func (s *Service) loadLogFacts(ctx context.Context, rules []Rule) *logFacts {
+	if s.logs == nil {
+		return nil
+	}
+	f := &logFacts{hits: map[int64]map[int64][]LogHit{}}
+	for _, r := range rules {
+		if !r.Enabled {
+			continue
+		}
+		var err error
+		switch r.Kind {
+		case KindLogSilence:
+			if f.lastSeen == nil {
+				f.lastSeen, err = s.logs.LastSeen(ctx)
+			}
+		case KindLogAttacks, KindVPNFailures:
+			f.hits[r.ID], err = s.logs.Hits(ctx, r.Kind, time.Duration(r.WindowMinutes)*time.Minute, int(r.Threshold))
+		}
+		if err != nil {
+			// Without answers the rule keeps its alerts as they are.
+			s.log.Warn("log alert rule", "rule", r.Name, "err", err)
+			return nil
+		}
+	}
+	return f
+}
+
+func (s *Service) conditions(r Rule, d *inventory.Device, st *inventory.Status, lic *licformat.License, lf *logFacts, now time.Time) []condition {
 	fresh := st != nil && now.Sub(st.At) < 10*time.Minute
 	pct := func(name string, v float64) []condition {
 		if fresh && v >= r.Threshold {
@@ -420,6 +498,24 @@ func (s *Service) conditions(r Rule, d *inventory.Device, st *inventory.Status, 
 				continue
 			}
 			out = append(out, condition{subject: c.Name, message: expiryText("FortiGuard contract "+c.Name, *c.Expires, now)})
+		}
+		return out
+	case KindLogSilence:
+		if last, ok := lf.lastSeen[d.ID]; ok && now.Sub(last) >= time.Duration(r.Threshold)*time.Minute {
+			return []condition{{message: fmt.Sprintf("no logs received for %d minutes (last at %s)", int(now.Sub(last).Minutes()), last.UTC().Format("2006-01-02 15:04 UTC"))}}
+		}
+	case KindLogAttacks, KindVPNFailures:
+		var out []condition
+		for _, h := range lf.hits[r.ID][d.ID] {
+			what := "attacks from"
+			if r.Kind == KindVPNFailures {
+				what = "failed VPN logins by"
+			}
+			msg := fmt.Sprintf("%d %s %s in %d minutes", h.Count, what, h.Subject, r.WindowMinutes)
+			if h.Detail != "" {
+				msg += " (" + h.Detail + ")"
+			}
+			out = append(out, condition{subject: h.Subject, message: msg})
 		}
 		return out
 	case KindLicenseExpiry:
@@ -470,9 +566,15 @@ func (s *Service) Evaluate(ctx context.Context) error {
 		return err
 	}
 	lic, _ := s.guard.License()
+	lf := s.loadLogFacts(ctx, rules)
 	var notes []pending
 	for _, r := range rules {
 		if !r.Enabled {
+			continue
+		}
+		isLog := r.Kind == KindLogSilence || r.Kind == KindLogAttacks || r.Kind == KindVPNFailures
+		if isLog && lf == nil {
+			// No log store, or it did not answer: leave these alerts as they are.
 			continue
 		}
 		for _, d := range devices {
@@ -483,7 +585,7 @@ func (s *Service) Evaluate(ctx context.Context) error {
 			}
 			var conds []condition
 			if r.GroupID == nil || (d.GroupID != nil && *d.GroupID == *r.GroupID) {
-				conds = s.conditions(r, d, statuses[d.ID], lic, now)
+				conds = s.conditions(r, d, statuses[d.ID], lic, lf, now)
 			}
 			n, err := s.apply(ctx, r, d, conds, now)
 			if err != nil {

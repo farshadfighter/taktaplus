@@ -199,6 +199,7 @@ export type Rule = {
   channel_ids: number[]
   repeat_minutes: number
   enabled: boolean
+  window_minutes: number
 }
 
 export type ChannelConfig = {
@@ -213,9 +214,12 @@ export type ChannelConfig = {
   secret?: string
   address?: string
   protocol?: string
+  bot_token?: string
+  chat_id?: string
+  api_base?: string
 }
 
-export type Channel = { id: number; name: string; kind: 'email' | 'webhook' | 'syslog'; config: ChannelConfig; enabled: boolean }
+export type Channel = { id: number; name: string; kind: 'email' | 'webhook' | 'syslog' | 'bale' | 'eitaa'; config: ChannelConfig; enabled: boolean }
 
 export type Backup = {
   id: number
@@ -431,7 +435,7 @@ export type OtpEvent = { id: number; at: string; username: string; device_id: nu
 
 // --- logs and reports (module E) ---
 
-export type LogColumn = { key: string; title: string; type: 'text' | 'number' | 'bytes' | 'duration' | 'ip' | 'country' | 'severity' | 'action' | 'device' }
+export type LogColumn = { key: string; title: string; type: 'text' | 'number' | 'bytes' | 'duration' | 'ip' | 'country' | 'severity' | 'action' | 'device' | 'date' }
 export type LogDrill = { type: string; field: string; key: string }
 export type LogWidget = {
   id: string
@@ -441,6 +445,7 @@ export type LogWidget = {
   columns: LogColumn[]
   drill?: LogDrill
   rows?: Record<string, string | number>[]
+  previous?: Record<string, string | number>[]
 }
 export type LogView = { id: string; title: string; columns: LogColumn[] }
 export type LogCatalog = { widgets: LogWidget[]; tabs: Record<string, string[]>; views: LogView[] }

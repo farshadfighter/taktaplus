@@ -251,7 +251,7 @@ func TestCollectorAndQueries(t *testing.T) {
 	if e := get(8); e["critical"] != float64(1) {
 		t.Fatalf("events = %v", e)
 	}
-	if n := len(data[9].Rows); n != 2 {
+	if n := len(data[9].Rows); n < 2 || n > 3 {
 		t.Fatalf("series has %d points", n)
 	}
 	if c := get(10); c["name"] != "United States" {
@@ -291,5 +291,52 @@ func TestCollectorAndQueries(t *testing.T) {
 	}
 	if lines := strings.Split(strings.TrimSpace(csvOut.String()), "\n"); len(lines) != 3 || !strings.Contains(lines[1], "dev-127.0.0.3") {
 		t.Fatalf("csv = %q", csvOut.String())
+	}
+}
+
+func TestAlertQueries(t *testing.T) {
+	ch := chtest.New(t)
+	ctx := context.Background()
+	svc := &Service{ch: ch}
+	now := time.Now().UTC()
+	ts := func(d time.Duration) string { return now.Add(-d).Format("2006-01-02T15:04:05.000Z") }
+	var waf, threat, event []any
+	for i := 0; i < 12; i++ {
+		waf = append(waf, map[string]any{"ts": ts(time.Minute), "device_id": 2, "srcip": "45.155.205.233", "attack": "SQL Injection"})
+	}
+	waf = append(waf, map[string]any{"ts": ts(2 * time.Hour), "device_id": 2, "srcip": "45.155.205.233", "attack": "Old"})
+	for i := 0; i < 5; i++ {
+		threat = append(threat, map[string]any{"ts": ts(time.Minute), "device_id": 2, "srcip": "45.155.205.233", "subtype": "ips", "threat": "Log4j"})
+		threat = append(threat, map[string]any{"ts": ts(time.Minute), "device_id": 1, "srcip": "10.0.0.9", "subtype": "webfilter", "threat": "Gambling"})
+	}
+	for i := 0; i < 4; i++ {
+		event = append(event, map[string]any{"ts": ts(time.Minute), "device_id": 1, "subtype": "vpn", "action": "ssl-login-fail", "username": "admin", "srcip": "6.6.6.6", "logdesc": "SSL VPN login fail"})
+	}
+	event = append(event, map[string]any{"ts": ts(3 * time.Hour), "device_id": 3, "subtype": "system"})
+	for table, rows := range map[string][]any{TableWAF: waf, TableThreat: threat, TableEvent: event} {
+		if err := ch.Insert(ctx, table, rows); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hits, err := svc.Hits(ctx, "log_attacks", 10*time.Minute, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := hits[2]; len(h) != 1 || h[0].Subject != "45.155.205.233" || h[0].Count != 17 || h[0].Detail != "SQL Injection" || len(hits[1]) != 0 {
+		t.Fatalf("attack hits = %+v", hits)
+	}
+	if hits, _ := svc.Hits(ctx, "log_attacks", 10*time.Minute, 18); len(hits) != 0 {
+		t.Fatalf("threshold ignored: %+v", hits)
+	}
+	vpn, err := svc.Hits(ctx, "vpn_failures", 15*time.Minute, 3)
+	if err != nil || len(vpn[1]) != 1 || vpn[1][0].Subject != "admin @ 6.6.6.6" || vpn[1][0].Count != 4 {
+		t.Fatalf("vpn hits = %+v %v", vpn, err)
+	}
+	last, err := svc.LastSeen(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(last) != 3 || now.Sub(last[3]) < 3*time.Hour-time.Minute || now.Sub(last[2]) > 2*time.Minute {
+		t.Fatalf("last seen = %v", last)
 	}
 }

@@ -253,6 +253,9 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	if err := logSvc.Load(ctx); err != nil {
 		return fmt.Errorf("log settings: %w", err)
 	}
+	if logSvc.Enabled() {
+		alertSvc.SetLogSource(logSvc)
+	}
 	if col := logSvc.Collector(); col != nil {
 		l := logs.Listeners{UDP: cfg.SyslogUDP, TCP: cfg.SyslogTCP, TLS: cfg.SyslogTLS}
 		if l.TLS != "" {
@@ -265,6 +268,7 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		log.Info("syslog collector listening", "addrs", col.Addrs())
 	}
 	go syncGeoIP(ctx, geo, pkgs, log)
+	reports.RegisterSystemWidgets(pool, inv, guard)
 	reportSvc := reports.New(pool, logSvc, alertSvc, inv, log.With("component", "reports"), reports.Options{
 		Dir: filepath.Join(cfg.DataDir, "reports"), TmpDir: tmpDir, Chromium: cfg.Chromium, Location: cfg.TimeZone})
 	if err := reportSvc.RecoverRuns(ctx); err != nil {
