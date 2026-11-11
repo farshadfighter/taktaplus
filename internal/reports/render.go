@@ -46,6 +46,10 @@ func formatValue(typ string, v any) string {
 		return faNumber(toFloat(v))
 	case "duration":
 		return faDuration(toFloat(v))
+	case "date":
+		if t, err := time.Parse(time.DateOnly, fmt.Sprint(v)); err == nil {
+			return FaDate(t)
+		}
 	case "severity":
 		s := fmt.Sprint(v)
 		if fa := severityFa[strings.ToLower(s)]; fa != "" {
@@ -132,7 +136,27 @@ func faDuration(sec float64) string {
 	return faDigits.Replace(fmt.Sprintf("%d ثانیه", int(sec)))
 }
 
-type kpi struct{ Label, Value string }
+type kpi struct{ Label, Value, Change, Tone string }
+
+// change compares a figure with the previous period, e.g. "▲ ۱۲٪".
+func change(cur, prev float64) (string, string) {
+	switch {
+	case prev == 0 && cur == 0:
+		return "بدون تغییر", ""
+	case prev == 0:
+		return "جدید در این دوره", "up"
+	}
+	pct := (cur - prev) / prev * 100
+	if math.Abs(pct) < 0.5 {
+		return "بدون تغییر", ""
+	}
+	arrow, tone := "▲", "up"
+	if pct < 0 {
+		arrow, tone = "▼", "down"
+	}
+	return faDigits.Replace(fmt.Sprintf("%s %.0f٪ نسبت به دوره‌ی قبل", arrow, math.Abs(pct))), tone
+}
+
 type bar struct {
 	Name, Value string
 	Pct         float64
@@ -170,7 +194,11 @@ func viewOf(w logs.Data, names map[int64]string, loc *time.Location) widgetView 
 			return v
 		}
 		for _, c := range w.Columns {
-			v.KPIs = append(v.KPIs, kpi{Label: c.Title, Value: cellText(w, c, w.Rows[0], names)})
+			k := kpi{Label: c.Title, Value: cellText(w, c, w.Rows[0], names)}
+			if len(w.Previous) == 1 {
+				k.Change, k.Tone = change(toFloat(w.Rows[0][c.Key]), toFloat(w.Previous[0][c.Key]))
+			}
+			v.KPIs = append(v.KPIs, k)
 		}
 	case logs.KindBars:
 		maxV := 0.0
@@ -286,6 +314,7 @@ h2 { font-size: 14px; margin: 0 0 8px; color: #111827; border-right: 4px solid #
 .kpi { flex: 1; border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px 12px; }
 .kpi .l { color: #6B7280; font-size: 11px; }
 .kpi .v { font-size: 18px; font-weight: 700; margin-top: 4px; }
+.kpi .c { font-size: 10px; color: #6B7280; margin-top: 2px; }
 table { width: 100%; border-collapse: collapse; }
 th { background: #F3F4F6; text-align: right; font-weight: 700; padding: 6px 8px; font-size: 11px; color: #374151; }
 td { padding: 5px 8px; border-bottom: 1px solid #F3F4F6; unicode-bidi: plaintext; text-align: right; }
@@ -306,7 +335,7 @@ td { padding: 5px 8px; border-bottom: 1px solid #F3F4F6; unicode-bidi: plaintext
 {{if .Description}}<p class="desc">{{.Description}}</p>{{end}}
 {{range .Widgets}}<section><h2>{{.Title}}</h2>
 {{if .Empty}}<div class="empty">داده‌ای در این بازه نیست.</div>
-{{else if eq .Kind "kpis"}}<div class="kpis">{{range .KPIs}}<div class="kpi"><div class="l">{{.Label}}</div><div class="v">{{.Value}}</div></div>{{end}}</div>
+{{else if eq .Kind "kpis"}}<div class="kpis">{{range .KPIs}}<div class="kpi"><div class="l">{{.Label}}</div><div class="v">{{.Value}}</div>{{if .Change}}<div class="c {{.Tone}}">{{.Change}}</div>{{end}}</div>{{end}}</div>
 {{else if eq .Kind "bars"}}<div class="bars">{{range .Bars}}<div class="row"><div class="n">{{.Name}}</div><div class="t"><div class="f" style="width: {{printf "%.1f" .Pct}}%"></div></div><div class="v">{{.Value}}</div></div>{{end}}</div>
 {{else if eq .Kind "series"}}{{.Chart}}
 {{else}}<table><thead><tr>{{range .Table.Headers}}<th>{{.}}</th>{{end}}</tr></thead><tbody>{{range .Table.Rows}}<tr>{{range .}}<td>{{.}}</td>{{end}}</tr>{{end}}</tbody></table>{{end}}
@@ -360,6 +389,21 @@ func XLSX(doc Document) ([]byte, error) {
 		sh := sheet{Name: w.Title}
 		if w.Kind == logs.KindSeries {
 			sh.Header = append(sh.Header, "زمان")
+		}
+		if w.Kind == logs.KindKPIs && len(w.Previous) == 1 {
+			sh.Header = append(sh.Header, "دوره")
+			for i, rows := range [][]map[string]any{w.Rows, w.Previous} {
+				cells := []any{[]string{"این دوره", "دوره‌ی قبل"}[i]}
+				for _, c := range w.Columns {
+					cells = append(cells, plainValue(c.Type, rows[0][c.Key]))
+				}
+				sh.Rows = append(sh.Rows, cells)
+			}
+			for _, c := range w.Columns {
+				sh.Header = append(sh.Header, c.Title)
+			}
+			sheets = append(sheets, sh)
+			continue
 		}
 		for _, c := range w.Columns {
 			sh.Header = append(sh.Header, c.Title)

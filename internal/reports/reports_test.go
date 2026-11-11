@@ -203,6 +203,7 @@ func TestServiceRunsAndSchedules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	RegisterSystemWidgets(db, inv, guard)
 	svc := New(db, lg, al, inv, quiet, Options{Dir: t.TempDir(), Location: tehran})
 	var pages [][]byte
 	svc.pdf = func(_ context.Context, page []byte) ([]byte, error) {
@@ -211,7 +212,7 @@ func TestServiceRunsAndSchedules(t *testing.T) {
 	}
 
 	tpls, err := svc.Templates(ctx)
-	if err != nil || len(tpls) != 6 || !tpls[0].Builtin {
+	if err != nil || len(tpls) != 7 || !tpls[0].Builtin {
 		t.Fatalf("templates = %v, %v", tpls, err)
 	}
 	if _, err := svc.SaveTemplate(ctx, Template{ID: tpls[0].ID, Name: "x", Widgets: []string{"kpi_overview"}}, "admin"); err == nil {
@@ -305,6 +306,31 @@ func TestServiceRunsAndSchedules(t *testing.T) {
 	}
 	if err := svc.Retry(ctx, r.ID); err == nil {
 		t.Fatal("retried a sent run")
+	}
+	// The management summary mixes system and log widgets and compares
+	// KPIs with the previous period.
+	var summary *Template
+	for _, tp := range tpls {
+		if tp.Name == "خلاصه‌ی مدیریتی" {
+			summary = tp
+		}
+	}
+	data, err := lg.Query(ctx, summary.Widgets, logs.Range{From: now.Add(-24 * time.Hour), To: now.Add(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k := data[0].Rows[0]; k["total"] != 1 || k["online"] != 1 || data[0].Previous != nil {
+		t.Fatalf("devices = %+v", data[0])
+	}
+	if data[2].ID != "kpi_overview" || len(data[2].Previous) != 1 {
+		t.Fatalf("overview = %+v", data[2])
+	}
+	if k := data[7].Rows[0]; k["missing"] != 1 {
+		t.Fatalf("backups = %+v", k)
+	}
+	page, err := HTML(Document{Title: summary.Name, From: now.Add(-24 * time.Hour), To: now, Widgets: data}, tehran)
+	if err != nil || !bytes.Contains(page, []byte("جدید در این دوره")) {
+		t.Fatalf("summary page lacks the comparison: %v", err)
 	}
 	if err := svc.DeleteRun(ctx, run.ID); err != nil {
 		t.Fatal(err)

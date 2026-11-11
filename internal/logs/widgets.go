@@ -32,11 +32,31 @@ type Widget struct {
 	Kind    string   `json:"kind"`
 	Group   string   `json:"group"` // security, traffic, web, vpn, waf, events
 	Columns []Column `json:"columns"`
+	// Snapshot widgets describe the present, not the period; they have no
+	// previous-period figures.
+	Snapshot bool `json:"-"`
 	// Drill names the log view type and the column used to filter it when a
 	// row is clicked.
 	Drill *Drill `json:"drill,omitempty"`
 
 	sql func(bucket string) string
+	// provider answers widgets that are not log queries (system status).
+	provider Provider
+}
+
+// Provider computes a widget's rows from outside the log store.
+type Provider func(ctx context.Context, r Range) ([]map[string]any, error)
+
+// RegisterWidget adds a widget computed by p, for report templates. It is
+// meant for start-up, before any query runs.
+func RegisterWidget(w Widget, p Provider) {
+	w.provider = p
+	if old := widgetByID[w.ID]; old != nil {
+		*old = w
+		return
+	}
+	widgets = append(widgets, &w)
+	widgetByID[w.ID] = &w
 }
 
 // Drill links a widget row to the log viewer.
@@ -46,10 +66,12 @@ type Drill struct {
 	Key   string `json:"key"`   // row key that holds the value
 }
 
-// Data is a widget with its rows.
+// Data is a widget with its rows. KPI widgets also carry the figures of
+// the previous period of the same length, for comparison.
 type Data struct {
 	Widget
-	Rows []map[string]any `json:"rows"`
+	Rows     []map[string]any `json:"rows"`
+	Previous []map[string]any `json:"previous,omitempty"`
 }
 
 // Range is the scope of a query.
@@ -288,25 +310,40 @@ func (r Range) bucket() string {
 
 // Query runs the widgets in ids for the range.
 func (s *Service) Query(ctx context.Context, ids []string, r Range) ([]Data, error) {
-	if s.ch == nil {
-		return nil, ErrDisabled
-	}
 	out := make([]Data, 0, len(ids))
 	for _, id := range ids {
 		w := widgetByID[id]
 		if w == nil {
 			return nil, fmt.Errorf("unknown widget %q", id)
 		}
-		rows, err := chstore.Select[map[string]any](ctx, s.ch, w.sql(r.bucket()), r.params())
+		rows, err := s.rows(ctx, w, r)
 		if err != nil {
 			return nil, fmt.Errorf("widget %s: %w", id, err)
 		}
+		d := Data{Widget: *w, Rows: rows}
 		if w.Kind == KindSeries {
-			rows = fillSeries(rows, w, r)
+			d.Rows = fillSeries(rows, w, r)
 		}
-		out = append(out, Data{Widget: *w, Rows: rows})
+		if w.Kind == KindKPIs && !w.Snapshot {
+			span := r.To.Sub(r.From)
+			prev := Range{From: r.From.Add(-span), To: r.From, DeviceIDs: r.DeviceIDs}
+			if d.Previous, err = s.rows(ctx, w, prev); err != nil {
+				return nil, fmt.Errorf("widget %s: %w", id, err)
+			}
+		}
+		out = append(out, d)
 	}
 	return out, nil
+}
+
+func (s *Service) rows(ctx context.Context, w *Widget, r Range) ([]map[string]any, error) {
+	if w.provider != nil {
+		return w.provider(ctx, r)
+	}
+	if s.ch == nil {
+		return nil, ErrDisabled
+	}
+	return chstore.Select[map[string]any](ctx, s.ch, w.sql(r.bucket()), r.params())
 }
 
 // fillSeries adds zero points so charts show gaps as zero.

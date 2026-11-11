@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber, Radio, Row, Select, Space, Switch, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Col, Form, Input, InputNumber, Radio, Row, Select, Space, Switch, Tag, Typography } from 'antd'
+import { JDatePicker } from './jalali'
 import { useNavigate } from 'react-router'
 import type { Dayjs } from 'dayjs'
 import { api, type Change, type DeviceRow } from './api'
@@ -118,7 +119,7 @@ export function ChangeForm({ kind, spec, children, defaultTitle, filterDevice, e
             <Form.Item name="run_mode" label="زمان اجرا">
               <Radio.Group options={[{ value: 'window', label: 'پنجره‌ی نگهداری' }, { value: 'at', label: 'زمان مشخص' }, { value: 'now', label: 'فوری' }]} />
             </Form.Item>
-            {mode === 'at' && <Form.Item name="run_at" label="زمان" rules={[{ required: true }]}><DatePicker showTime style={{ width: '100%' }} /></Form.Item>}
+            {mode === 'at' && <Form.Item name="run_at" label="زمان" rules={[{ required: true }]}><JDatePicker showTime style={{ width: '100%' }} /></Form.Item>}
             {mode === 'now' && (
               <Form.Item name="urgent_reason" label="دلیل اجرای خارج از پنجره" rules={[{ required: true, message: 'دلیل را بنویسید' }]}><Input /></Form.Item>
             )}

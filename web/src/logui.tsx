@@ -1,8 +1,9 @@
 import { useMemo, type ReactNode } from 'react'
-import { Card, DatePicker, Empty, Select, Segmented, Space, Table, Tag, Typography } from 'antd'
+import { Card, Empty, Select, Segmented, Space, Table, Tag, Typography } from 'antd'
+import { JRangePicker } from './jalali'
 import dayjs, { type Dayjs } from 'dayjs'
 import type { Device, LogColumn, LogWidget } from './api'
-import { faDateTime, faNum } from './format'
+import { faDate, faDateTime, faNum } from './format'
 import { brand } from './theme'
 import { Mono, bytesText } from './ui'
 import { useFetch } from './useFetch'
@@ -46,6 +47,8 @@ export function cell(type: LogColumn['type'], v: unknown, devices?: Map<number, 
       return <Tag color={blocked.has(String(v).toLowerCase()) ? 'red' : 'green'}>{String(v)}</Tag>
     case 'device':
       return devices?.get(Number(v)) ?? String(v)
+    case 'date':
+      return faDate(String(v))
   }
   return <span style={{ unicodeBidi: 'plaintext' }}>{String(v)}</span>
 }
@@ -73,9 +76,9 @@ export function PeriodPicker({ value, onChange, options = ['1h', '24h', '7d', '3
         onChange={(v) => onChange(v === 'custom' ? { ...value, preset: 'custom' } : periodOf(String(v)))}
       />
       {value.preset === 'custom' && (
-        <DatePicker.RangePicker
+        <JRangePicker
           showTime={{ format: 'HH:mm' }}
-          format="YYYY-MM-DD HH:mm"
+          format="YYYY/MM/DD HH:mm"
           value={[dayjs(value.from), dayjs(value.to)]}
           onChange={(r) => {
             const [a, b] = (r ?? []) as [Dayjs | null, Dayjs | null]
@@ -190,14 +193,29 @@ function Bars({ w, onDrill }: { w: LogWidget; onDrill?: (row: Record<string, str
   )
 }
 
+// Change shows a figure against the previous period.
+function Change({ cur, prev }: { cur: number; prev: number }) {
+  if (!prev && !cur) return <Typography.Text type="secondary" style={{ fontSize: 12 }}>بدون تغییر</Typography.Text>
+  if (!prev) return <Typography.Text type="secondary" style={{ fontSize: 12 }}>جدید در این دوره</Typography.Text>
+  const pct = ((cur - prev) / prev) * 100
+  if (Math.abs(pct) < 0.5) return <Typography.Text type="secondary" style={{ fontSize: 12 }}>بدون تغییر</Typography.Text>
+  return (
+    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+      {pct > 0 ? '▲' : '▼'} {faNum(Math.round(Math.abs(pct)))}٪ نسبت به دوره‌ی قبل
+    </Typography.Text>
+  )
+}
+
 export function KPIs({ w }: { w: LogWidget }) {
   const row = w.rows?.[0] ?? {}
+  const prev = w.previous?.[0]
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
       {w.columns.map((c) => (
         <Card key={c.key} size="small" styles={{ body: { padding: 16 } }}>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>{c.title}</Typography.Text>
           <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{cell(c.type, row[c.key] ?? 0)}</div>
+          {prev && <Change cur={Number(row[c.key] ?? 0)} prev={Number(prev[c.key] ?? 0)} />}
         </Card>
       ))}
     </div>

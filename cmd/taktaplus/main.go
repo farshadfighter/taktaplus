@@ -268,6 +268,7 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		log.Info("syslog collector listening", "addrs", col.Addrs())
 	}
 	go syncGeoIP(ctx, geo, pkgs, log)
+	reports.RegisterSystemWidgets(pool, inv, guard)
 	reportSvc := reports.New(pool, logSvc, alertSvc, inv, log.With("component", "reports"), reports.Options{
 		Dir: filepath.Join(cfg.DataDir, "reports"), TmpDir: tmpDir, Chromium: cfg.Chromium, Location: cfg.TimeZone})
 	if err := reportSvc.RecoverRuns(ctx); err != nil {

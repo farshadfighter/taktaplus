@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Progress, Radio, Row, Select, Space, Switch, Table, Tabs, Tag, Typography, Upload, App as AntApp } from 'antd'
+import { Alert, Button, Card, Col, Form, Input, InputNumber, Modal, Popconfirm, Progress, Radio, Row, Select, Space, Switch, Table, Tabs, Tag, Typography, Upload, App as AntApp } from 'antd'
+import { JDatePicker } from '../jalali'
 import dayjs from 'dayjs'
 import { api, type PackageSource, type RepoPackage, type SyncRun } from '../api'
 import { useCan } from '../auth'
@@ -63,7 +64,7 @@ function EditPackage({ pkg, onClose }: { pkg: RepoPackage | null; onClose: (save
           <Col span={12}><Form.Item name="platform" label="پلتفرم"><Radio.Group optionType="button" options={[{ value: 'fortigate', label: 'FortiGate' }, { value: 'fortiweb', label: 'FortiWeb' }]} /></Form.Item></Col>
           <Col span={12}><Form.Item name="type" label="نوع"><Select options={(types[platform] ?? []).map((t) => ({ value: t, label: typeLabel[t] }))} /></Form.Item></Col>
           <Col span={12}><Form.Item name="version" label="نسخه" rules={[{ required: true }]}><Input dir="ltr" /></Form.Item></Col>
-          <Col span={12}><Form.Item name="released_at" label="تاریخ انتشار"><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={12}><Form.Item name="released_at" label="تاریخ انتشار"><JDatePicker style={{ width: '100%' }} /></Form.Item></Col>
           <Col span={24}><Form.Item name="models" label="مدل‌های سازگار (خالی = همه)"><Select mode="tags" tokenSeparators={[',', ' ']} /></Form.Item></Col>
           <Col span={12}><Form.Item name="fw_min" label="حداقل فرم‌ور"><Input dir="ltr" /></Form.Item></Col>
           <Col span={12}><Form.Item name="fw_max" label="حداکثر فرم‌ور"><Input dir="ltr" /></Form.Item></Col>

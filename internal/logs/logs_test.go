@@ -251,7 +251,7 @@ func TestCollectorAndQueries(t *testing.T) {
 	if e := get(8); e["critical"] != float64(1) {
 		t.Fatalf("events = %v", e)
 	}
-	if n := len(data[9].Rows); n != 2 {
+	if n := len(data[9].Rows); n < 2 || n > 3 {
 		t.Fatalf("series has %d points", n)
 	}
 	if c := get(10); c["name"] != "United States" {

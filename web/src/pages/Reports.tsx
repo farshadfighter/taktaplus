@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Checkbox, Col, DatePicker, Form, Input, InputNumber, Modal, Popconfirm, Radio, Row, Select, Space, Switch, Table, Tag, TimePicker, Typography, App as AntApp } from 'antd'
+import { Alert, Button, Card, Checkbox, Col, Form, Input, InputNumber, Modal, Popconfirm, Radio, Row, Select, Space, Switch, Table, Tag, TimePicker, Typography, App as AntApp } from 'antd'
+import { JRangePicker } from '../jalali'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useSearchParams } from 'react-router'
 import { api, type Channel, type Group, type LogCatalog, type ReportRun, type ReportSchedule, type ReportTemplate } from '../api'
@@ -57,7 +58,7 @@ function RunModal({ template, initial, onClose, onStarted }: {
         }
       }}>
         <Form.Item name="range" label="بازه" rules={[{ required: true }]}>
-          <DatePicker.RangePicker showTime={{ format: 'HH:mm' }} format="YYYY-MM-DD HH:mm" style={{ width: '100%' }} />
+          <JRangePicker showTime={{ format: 'HH:mm' }} format="YYYY/MM/DD HH:mm" style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item name="devices" label="دستگاه‌ها"><DeviceSelect devices={list} style={{ width: '100%' }} /></Form.Item>
         <Form.Item name="formats" label="خروجی" rules={[{ required: true, message: 'حداقل یک خروجی' }]}>
@@ -74,7 +75,7 @@ function TemplateModal({ open, value, catalog, onClose, onSaved }: { open: boole
   useEffect(() => {
     if (open) form.setFieldsValue(value ? { name: value.builtin ? value.name + ' (کپی)' : value.name, description: value.description, widgets: value.widgets } : { name: '', description: '', widgets: [] })
   }, [open, value, form])
-  const groups: Record<string, string> = { security: 'امنیت', traffic: 'ترافیک', web: 'WebFilter', vpn: 'VPN', waf: 'WAF', events: 'رویدادها' }
+  const groups: Record<string, string> = { system: 'وضعیت سامانه', security: 'امنیت', traffic: 'ترافیک', web: 'WebFilter', vpn: 'VPN', waf: 'WAF', events: 'رویدادها' }
   const editing = value && !value.builtin
   return (
     <Modal open={open} title={editing ? 'ویرایش قالب' : 'قالب سفارشی'} okText="ذخیره" cancelText="انصراف" onCancel={onClose} onOk={() => form.submit()} width={640} destroyOnHidden>
