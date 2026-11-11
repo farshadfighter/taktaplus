@@ -272,6 +272,7 @@ func BuildPlan(in Input) *Plan {
 		var op *Op
 		switch {
 		case have == nil:
+			e.unsets = nil // nothing to clear on a new entry
 			op = &Op{Action: "create", Type: o.Type, Name: o.Name, Detail: describe(o.Type, v)}
 		default:
 			if d := differs(sec, e, have); len(d) > 0 {
@@ -320,6 +321,7 @@ func BuildPlan(in Input) *Plan {
 		if have == nil {
 			p.Ops = append(p.Ops, Op{Action: "create", Type: "policy", Name: fmt.Sprintf("%d %s", pol.ID, pol.Name),
 				Detail: fmt.Sprintf("%s → %s، %s", strings.Join(pol.SrcZones, ","), strings.Join(pol.DstZones, ","), pol.Action)})
+			e.unsets = nil
 			polEntries = append(polEntries, e)
 		} else if d := differs("firewall policy", e, have); len(d) > 0 {
 			p.Ops = append(p.Ops, Op{Action: "update", Type: "policy", Name: fmt.Sprintf("%d %s", pol.ID, pol.Name), Detail: strings.Join(d, "، ")})

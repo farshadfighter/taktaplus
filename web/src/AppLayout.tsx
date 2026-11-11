@@ -17,7 +17,7 @@ function NavMenu({ onNavigate, openAlerts, pending }: { onNavigate?: () => void;
   const { user } = useAuth()
   const { pathname } = useLocation()
   const parts = pathname.split('/')
-  const key = parts[1] === 'otp' ? `/otp/${parts[2] ?? ''}` : parts[1] === 'logs' && parts[2] === 'settings' ? '/logs/settings' : '/' + (parts[1] ?? '')
+  const key = parts[1] === 'otp' ? `/otp/${parts[2] ?? ''}` : parts[1] === 'logs' && parts[2] === 'settings' ? '/logs/settings' : parts[1] === 'policy' && parts[2] === 'objects' ? '/policy/objects' : '/' + (parts[1] ?? '')
   const link = (to: string, label: React.ReactNode) => ({ key: to, label: <Link to={to} onClick={onNavigate}>{label}</Link> })
   const system = [
     ...(can(user, 'users.manage') ? [link('/users', 'کاربران پنل')] : []),
@@ -42,6 +42,8 @@ function NavMenu({ onNavigate, openAlerts, pending }: { onNavigate?: () => void;
         link('/firmware', 'ارتقای فرم‌ور'),
         link('/scripts', 'اسکریپت‌ها'),
         link('/compliance', 'قالب و انطباق'),
+        link('/policy', 'Policy Packageها'),
+        link('/policy/objects', 'آبجکت‌های مشترک'),
         link('/packages', 'پکیج‌ها و منابع'),
         link('/maintenance', 'پنجره‌ها و تأیید'),
       ],

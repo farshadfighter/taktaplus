@@ -20,6 +20,9 @@ import Deploy from './pages/Deploy'
 import Firmware from './pages/Firmware'
 import Scripts from './pages/Scripts'
 import ScriptEdit from './pages/ScriptEdit'
+import PolicyObjects from './pages/PolicyObjects'
+import PolicyPackages from './pages/PolicyPackages'
+import PolicyInstall from './pages/PolicyInstall'
 import Maintenance from './pages/Maintenance'
 import OtpUsers from './pages/OtpUsers'
 import OtpSettings from './pages/OtpSettings'
@@ -68,6 +71,10 @@ export default function App() {
           <Route path="logs/settings" element={<LogSettings />} />
           <Route path="reports" element={<Reports />} />
           <Route path="compliance" element={<Compliance />} />
+          <Route path="policy" element={<PolicyPackages />} />
+          <Route path="policy/objects" element={<PolicyObjects />} />
+          <Route path="policy/:id" element={<PolicyPackages />} />
+          <Route path="policy/:id/install" element={<PolicyInstall />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
