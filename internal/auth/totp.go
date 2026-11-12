@@ -61,13 +61,25 @@ func TOTPCode(secret []byte, t time.Time) string {
 
 // VerifyTOTP checks code against the steps around now.
 func VerifyTOTP(secret []byte, code string, now time.Time) bool {
+	_, ok := MatchTOTP(secret, code, now)
+	return ok
+}
+
+// MatchTOTP checks code against the steps around now and returns the step
+// it belongs to, so a caller can refuse a code that was already used.
+func MatchTOTP(secret []byte, code string, now time.Time) (int64, bool) {
 	if len(code) != totpDigits {
-		return false
+		return 0, false
 	}
 	counter := now.Unix() / totpStep
+	var step int64
 	ok := 0
 	for d := int64(-totpSkew); d <= totpSkew; d++ {
-		ok |= subtle.ConstantTimeCompare([]byte(totpAt(secret, uint64(counter+d))), []byte(code))
+		m := subtle.ConstantTimeCompare([]byte(totpAt(secret, uint64(counter+d))), []byte(code))
+		if m == 1 {
+			step = counter + d
+		}
+		ok |= m
 	}
-	return ok == 1
+	return step, ok == 1
 }

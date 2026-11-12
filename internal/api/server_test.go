@@ -48,7 +48,11 @@ type harness struct {
 	fleet  devicetest.Fleet
 	secret []byte // TOTP secret of the signed-in user
 	ch     *changes.Service
+	skew   time.Duration // the server's clock runs this far ahead, so every TOTP code is fresh
 }
+
+// now is the server's clock.
+func (h *harness) now() time.Time { return time.Now().Add(h.skew) }
 
 // fakeLicenseServer signs a one-device license for any activation request.
 func fakeLicenseServer(t *testing.T, priv ed25519.PrivateKey) *httptest.Server {
@@ -127,7 +131,9 @@ func newHarness(t *testing.T) *harness {
 		Changes: ch, Scripts: sc}))
 	t.Cleanup(ts.Close)
 	jar, _ := cookiejar.New(nil)
-	return &harness{t: t, db: db, auth: svc, ts: ts, client: &http.Client{Jar: jar}, fleet: fleet, ch: ch}
+	h := &harness{t: t, db: db, auth: svc, ts: ts, client: &http.Client{Jar: jar}, fleet: fleet, ch: ch}
+	svc.SetClock(h.now)
+	return h
 }
 
 func (h *harness) do(method, path string, body any) (int, map[string]any) {
@@ -168,7 +174,7 @@ func (h *harness) signIn(username string, role auth.Role) {
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	if code, body := h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": auth.TOTPCode(secret, time.Now())}); code != http.StatusOK {
+	if code, body := h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": auth.TOTPCode(secret, h.now())}); code != http.StatusOK {
 		h.t.Fatalf("mfa = %d %v", code, body)
 	}
 	h.secret = secret
@@ -353,7 +359,9 @@ func TestDevices(t *testing.T) {
 }
 
 func (h *harness) reauth() map[string]string {
-	return map[string]string{"password": "correct horse battery", "code": auth.TOTPCode(h.secret, time.Now())}
+	// A code is accepted once: step the clock to the next code.
+	h.skew += 30 * time.Second
+	return map[string]string{"password": "correct horse battery", "code": auth.TOTPCode(h.secret, h.now())}
 }
 
 func TestBackups(t *testing.T) {
@@ -490,5 +498,28 @@ func TestChangeWorkflowAPI(t *testing.T) {
 	}
 	if code, body := h.do("GET", "/api/v1/maintenance", nil); code != http.StatusOK || len(body["windows"].([]any)) != 1 {
 		t.Fatalf("maintenance = %d %v", code, body)
+	}
+}
+
+func TestTOTPCodeWorksOnce(t *testing.T) {
+	h := newHarness(t)
+	h.signIn("root", auth.RoleSuperAdmin)
+	r := h.reauth()
+	if code, _ := h.do("POST", "/api/v1/tokens", map[string]any{"name": "a", "role": "viewer", "password": r["password"], "code": r["code"]}); code != http.StatusCreated {
+		t.Fatalf("first use = %d", code)
+	}
+	if code, _ := h.do("POST", "/api/v1/tokens", map[string]any{"name": "b", "role": "viewer", "password": r["password"], "code": r["code"]}); code != http.StatusForbidden {
+		t.Fatalf("replayed code = %d", code)
+	}
+}
+
+func TestLoginRateLimit(t *testing.T) {
+	h := newHarness(t)
+	var code int
+	for i := 0; i < 25; i++ {
+		code, _ = h.do("POST", "/api/v1/auth/login", map[string]string{"username": "nobody", "password": "wrong password!!"})
+	}
+	if code != http.StatusTooManyRequests {
+		t.Fatalf("25th login attempt = %d, want 429", code)
 	}
 }

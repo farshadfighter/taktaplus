@@ -91,7 +91,7 @@ type Value struct {
 var (
 	portRange = regexp.MustCompile(`^\d{1,5}(-\d{1,5})?(:\d{1,5}(-\d{1,5})?)?$`)
 	hhmm      = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
-	nameRe    = regexp.MustCompile(`^[^"\\\n]{1,79}$`)
+	nameRe    = regexp.MustCompile(`^[^"\\\x00-\x1f\x7f]{1,79}$`) // no quotes, backslashes or control characters
 	weekdays  = []string{"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"}
 )
 

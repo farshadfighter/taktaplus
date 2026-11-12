@@ -221,7 +221,17 @@ func tokens(line string) []string {
 
 // Quote renders a value for CLI output: plain words stay bare, anything
 // else is double-quoted.
+//
+// Control characters (newline, carriage return, tab, …) become spaces: in a
+// CLI session a carriage return ends the command, so a value carrying one
+// could run commands of its own.
 func Quote(v string) string {
+	v = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, v)
 	plain := v != ""
 	for _, c := range v {
 		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("._:/-", c)) {

@@ -180,6 +180,9 @@ func (s *Service) Login(ctx context.Context, username, password, ip, userAgent s
 	return token, sess, nil
 }
 
+// SetClock replaces the clock (tests).
+func (s *Service) SetClock(now func() time.Time) { s.now = now }
+
 // Authenticate resolves a session token, enforcing idle and absolute expiry,
 // and marks the session active.
 func (s *Service) Authenticate(ctx context.Context, token string) (Session, error) {
@@ -263,10 +266,19 @@ func (s *Service) checkCode(ctx context.Context, userID int64, code string) (use
 	if err != nil {
 		return r, err
 	}
-	if !VerifyTOTP(secret, strings.TrimSpace(code), s.now()) {
+	step, ok := MatchTOTP(secret, strings.TrimSpace(code), s.now())
+	if !ok {
 		if err := s.recordFailure(ctx, userID, r.failed); err != nil {
 			return r, err
 		}
+		return r, ErrInvalidCode
+	}
+	// Each code works once: someone who sees a code cannot reuse it.
+	tag, err := s.db.Exec(ctx, `UPDATE users SET totp_last_step = $2 WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)`, userID, step)
+	if err != nil {
+		return r, err
+	}
+	if tag.RowsAffected() == 0 {
 		return r, ErrInvalidCode
 	}
 	return r, nil
