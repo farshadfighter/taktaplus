@@ -4,6 +4,7 @@ import { api, type UserInfo } from '../api'
 import { useAuth } from '../auth'
 import { roleNames } from '../AppLayout'
 import { faDateTime } from '../format'
+import { APITokens } from '../tokens'
 import { Mono, PageHeader } from '../ui'
 import { useFetch } from '../useFetch'
 
@@ -79,6 +80,7 @@ export default function Users() {
             },
           ]} />
       </Card>
+      <APITokens roleNames={roleNames} example="/devices" />
       <Modal open={editing !== null} destroyOnHidden okText="ذخیره" cancelText="انصراف" onCancel={() => setEditing(null)} onOk={() => form.submit()}
         title={editing?.mode === 'new' ? 'کاربر جدید' : editing?.mode === 'edit' ? `ویرایش ${editing.user.username}` : `تغییر رمز ${editing?.user.username ?? ''}`}>
         {error && <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} />}

@@ -617,3 +617,9 @@ export type SystemInfo = {
   version: string; commit: string; build_date: string; can_verify: boolean; updater: boolean; updater_seen: string | null
   backup_bytes: number; free_bytes: number
 }
+
+// --- API tokens ---
+export type APIToken = {
+  id: number; token_id: string; name: string; role: string; read_only: boolean; allowed_nets: string[] | null
+  expires_at: string | null; created_by: string; created_at: string; last_used_at: string | null; last_ip: string; revoked_at: string | null
+}
