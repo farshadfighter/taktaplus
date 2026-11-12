@@ -22,6 +22,7 @@ import (
 
 	"github.com/farshadfighter/taktaplus/internal/audit"
 	"github.com/farshadfighter/taktaplus/internal/backup"
+	"github.com/farshadfighter/taktaplus/internal/events"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 )
 
@@ -296,6 +297,9 @@ func nullID(id int64) *int64 {
 }
 
 func (s *Service) log_(ctx context.Context, db audit.Execer, by Actor, action string, id int64, details map[string]any) error {
+	// Panels refetch shortly after the event, by when the caller's
+	// transaction has committed.
+	events.Publish(events.Change, "", map[string]any{"id": id, "action": action})
 	src := audit.SourcePanel
 	if by.UserID == 0 {
 		src = audit.SourceSystem

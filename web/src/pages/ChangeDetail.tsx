@@ -6,6 +6,7 @@ import { useAuth, can } from '../auth'
 import { changeStatusTag, kindLabel, targetStatusTag } from '../changeui'
 import { faDateTime, faNum } from '../format'
 import { PageHeader } from '../ui'
+import { useLiveRefresh } from '../live'
 import { useFetch } from '../useFetch'
 
 type Detail = { change: Change; targets: ChangeTarget[]; approvals: ChangeApproval[] }
@@ -17,7 +18,8 @@ export default function ChangeDetail() {
   const { id } = useParams()
   const { message } = AntApp.useApp()
   const { user } = useAuth()
-  const { data, loading, error, reload, setData } = useFetch<Detail>(`/changes/${id}`)
+  const { data, loading, error, reload, refresh, setData } = useFetch<Detail>(`/changes/${id}`)
+  useLiveRefresh(['change'], refresh, (d) => String(d.id) === id)
   const [prompt, setPrompt] = useState<null | { action: string; title: string; field: string; required: boolean }>(null)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)

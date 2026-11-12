@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/farshadfighter/taktaplus/internal/alerts"
+	"github.com/farshadfighter/taktaplus/internal/events"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/logs"
 )
@@ -536,6 +537,7 @@ func (s *Service) finish(ctx context.Context, r *Run, status, msg string) {
 		r.ID, status, msg, files, now); err != nil {
 		s.log.Error("saving report run", "run", r.ID, "err", err)
 	}
+	events.Publish(events.Report, "logs.read", map[string]any{"id": r.ID, "status": status})
 }
 
 // scopeName describes the devices a run covers.

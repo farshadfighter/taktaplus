@@ -63,6 +63,7 @@ for ln in lines:
 
 def words(name):
     if name == 'openAPI': return 'OpenAPI document'
+    if name == 'liveEvents': return 'Live events (Server-Sent Events)'
     name = re.sub(r'^handle', '', name)
     name = {'MFA': 'verify MFA code', 'MFASetup': 'start MFA setup', 'MFAEnable': 'enable MFA', 'Me': 'current user', 'Login': 'log in', 'Logout': 'log out', 'AuditList': 'list audit log', 'openAPI': 'OpenAPI document'}.get(name, name)
     w = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', name).replace('_', ' ').lower()

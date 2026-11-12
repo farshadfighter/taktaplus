@@ -6,13 +6,15 @@ import { useCan } from '../auth'
 import { changeStatusTag, kindLabel } from '../changeui'
 import { faDateTime, faNum } from '../format'
 import { PageHeader } from '../ui'
+import { useLiveRefresh } from '../live'
 import { useFetch } from '../useFetch'
 
 export default function Changes() {
   const navigate = useNavigate()
   const canCreate = useCan('changes.create')
   const [status, setStatus] = useState('')
-  const { data, loading } = useFetch<{ items: Change[] }>('/changes?status=' + status)
+  const { data, loading, refresh } = useFetch<{ items: Change[] }>('/changes?status=' + status)
+  useLiveRefresh(['change'], refresh)
   const pending = (data?.items ?? []).filter((c) => c.status === 'pending').length
 
   return (

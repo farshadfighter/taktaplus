@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/farshadfighter/taktaplus/internal/alerts"
+	"github.com/farshadfighter/taktaplus/internal/events"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 )
 
@@ -164,9 +165,11 @@ func (m *Monitor) poll(ctx context.Context, d *inventory.Device, probe bool) {
 			m.log.Info("signatures failed", "device", d.Name, "err", err)
 		}
 	}
-	if err := m.refreshHealth(ctx, d); err != nil {
+	err := m.refreshHealth(ctx, d)
+	if err != nil {
 		m.log.Info("health poll failed", "device", d.Name, "err", err)
 	}
+	events.Publish(events.Device, "devices.read", map[string]any{"id": d.ID, "name": d.Name, "reachable": err == nil})
 }
 
 func (m *Monitor) refreshHealth(ctx context.Context, d *inventory.Device) error {

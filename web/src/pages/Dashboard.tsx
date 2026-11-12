@@ -5,6 +5,7 @@ import { useAuth, can } from '../auth'
 import { daysUntil, faDate, faDateTime, faNum } from '../format'
 import { brand } from '../theme'
 import { PageHeader, Usage, severityTag, statusTag } from '../ui'
+import { useLiveRefresh } from '../live'
 import { useFetch } from '../useFetch'
 import { reasonLabel } from './Backups'
 
@@ -14,6 +15,9 @@ export default function Dashboard() {
   const alerts = useFetch<{ items: AlertRow[]; open: Record<string, number> }>('/alerts?state=open&limit=8')
   const backups = useFetch<{ items: Backup[] }>('/backups?limit=8')
   const lic = useFetch<LicenseInfo>(can(user, 'license.read') ? '/license' : null)
+  useLiveRefresh(['device'], devices.refresh)
+  useLiveRefresh(['alert'], alerts.refresh)
+  useLiveRefresh(['backup'], backups.refresh)
 
   const list = devices.data?.items ?? []
   const online = list.filter((d) => d.status === 'online').length

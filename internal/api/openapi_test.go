@@ -36,7 +36,7 @@ func TestOpenAPICoversRoutes(t *testing.T) {
 		if apiTags[r.Tag] == "" {
 			t.Errorf("tag %q of %s has no description in apiTags", r.Tag, r.Key())
 		}
-		if r.Access == apidoc.Session && r.Perm == "" && r.Path != "/me" {
+		if r.Access == apidoc.Session && r.Perm == "" && r.Path != "/me" && r.Path != "/events" {
 			t.Errorf("%s needs a session but names no permission", r.Key())
 		}
 	}

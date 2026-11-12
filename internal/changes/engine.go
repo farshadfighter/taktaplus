@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/farshadfighter/taktaplus/internal/backup"
+	"github.com/farshadfighter/taktaplus/internal/events"
 )
 
 // maxOutput bounds the output kept per device.
@@ -124,6 +125,7 @@ func (s *Service) Tick(ctx context.Context, wg *sync.WaitGroup) error {
 			}
 			continue
 		}
+		events.Publish(events.Change, "", map[string]any{"id": c.ID, "status": "running"})
 		wg.Add(1)
 		go func(c *Change, devs []devInfo) {
 			defer wg.Done()
@@ -256,6 +258,7 @@ func (s *Service) runTarget(ctx context.Context, c *Change, t Target) (err error
 	if _, err := s.db.Exec(ctx, `UPDATE change_targets SET status = 'running', started_at = now() WHERE id = $1`, t.ID); err != nil {
 		return err
 	}
+	events.Publish(events.Change, "", map[string]any{"id": c.ID, "device_id": t.DeviceID, "status": "running"})
 	out := &limitedWriter{max: maxOutput}
 	var preBackup *int64
 	defer func() {
@@ -270,6 +273,7 @@ func (s *Service) runTarget(ctx context.Context, c *Change, t Target) (err error
 			finished_at = now() WHERE id = $1`, t.ID, status, out.buf.String(), truncate(msg, 2000), preBackup); dbErr != nil {
 			s.log.Error("record change target", "target", t.ID, "err", dbErr)
 		}
+		events.Publish(events.Change, "", map[string]any{"id": c.ID, "device_id": t.DeviceID, "status": status})
 	}()
 	d, err := s.inv.Get(ctx, t.DeviceID)
 	if err != nil {

@@ -4,6 +4,7 @@ import { api, type Channel, type SystemBackupView, type SystemInfo, type SystemR
 import { faDateTime, faNum } from '../format'
 import { upload } from '../upload'
 import { bytesText, Mono, PageHeader, useReauth } from '../ui'
+import { useLiveRefresh } from '../live'
 import { useFetch } from '../useFetch'
 
 type Overview = { info: SystemInfo; settings: SystemBackupView; runs: SystemRun[] | null; upgrades: SystemUpgrade[] | null }
@@ -240,6 +241,7 @@ function UpgradeCard({ info, upgrades, onChanged }: { info: SystemInfo; upgrades
 export default function SystemPage() {
   const data = useFetch<Overview>('/system')
   const channels = useFetch<{ items: Channel[] }>('/reports/channels')
+  useLiveRefresh(['backup', 'upgrade'], data.refresh, (d) => d.system === true || d.status !== undefined)
   const d = data.data
   const reload = data.reload
   const active = !!d && ((d.runs ?? []).some((r) => r.status === 'running') || (d.upgrades ?? []).some((u) => u.status === 'queued' || u.status === 'running'))

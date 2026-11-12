@@ -18,6 +18,7 @@ var apiRoutes = []apidoc.Route{
 	{Method: "GET", Path: "/logs/export.csv", Tag: "logs", Summary: "Log export", Perm: string(auth.PermLogsRead), Access: apidoc.Session},
 	{Method: "GET", Path: "/logs/dashboard", Tag: "logs", Summary: "Log dashboard", Perm: string(auth.PermLogsRead), Access: apidoc.Session},
 	{Method: "GET", Path: "/reports/runs/{id}/files/{format}", Tag: "reports", Summary: "Download report", Perm: string(auth.PermLogsRead), Access: apidoc.Session},
+	{Method: "GET", Path: "/events", Tag: "events", Summary: "Live events (Server-Sent Events)", Perm: "", Access: apidoc.Session},
 	{Method: "POST", Path: "/auth/login", Tag: "auth", Summary: "Log in", Perm: "", Access: apidoc.Public},
 	{Method: "POST", Path: "/auth/mfa", Tag: "auth", Summary: "Verify mfa code", Perm: "", Access: apidoc.Public},
 	{Method: "POST", Path: "/auth/mfa/setup", Tag: "auth", Summary: "Start mfa setup", Perm: "", Access: apidoc.Public},

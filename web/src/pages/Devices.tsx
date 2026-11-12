@@ -5,6 +5,7 @@ import { api, type DeviceRow, type Group } from '../api'
 import { useCan } from '../auth'
 import { faDateTime, faNum } from '../format'
 import { Mono, PageHeader, Usage, kindLabel, licenseTag, statusTag } from '../ui'
+import { useLiveRefresh } from '../live'
 import { useFetch } from '../useFetch'
 
 function Groups({ open, onClose, groups, reload }: { open: boolean; onClose: () => void; groups: Group[]; reload: () => void }) {
@@ -65,7 +66,8 @@ export default function Devices() {
   const [status, setStatus] = useState<string | null>(null)
   const [groupsOpen, setGroupsOpen] = useState(false)
   const path = '/devices' + (group ? `?group=${group}` : '')
-  const { data, error, loading } = useFetch<{ items: DeviceRow[] }>(path)
+  const { data, error, loading, refresh } = useFetch<{ items: DeviceRow[] }>(path)
+  useLiveRefresh(['device', 'alert'], refresh)
   const groups = useFetch<{ items: Group[] }>('/groups')
 
   const rows = useMemo(() => {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/farshadfighter/taktaplus-lic/pkg/licformat"
 
+	"github.com/farshadfighter/taktaplus/internal/events"
 	"github.com/farshadfighter/taktaplus/internal/inventory"
 	"github.com/farshadfighter/taktaplus/internal/license"
 	"github.com/farshadfighter/taktaplus/internal/secretbox"
@@ -414,6 +415,9 @@ func (s *Service) Ack(ctx context.Context, id int64, by string) error {
 	if err == nil && tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
+	if err == nil {
+		events.Publish(events.Alert, "", map[string]any{"id": id, "state": "acked", "by": by})
+	}
 	return err
 }
 
@@ -662,6 +666,11 @@ func (s *Service) apply(ctx context.Context, r Rule, d *inventory.Device, conds 
 	}
 	defer tx.Rollback(ctx)
 	var notes []pending
+	var live []map[string]any
+	liveEvent := func(id int64, state, text string) {
+		live = append(live, map[string]any{"id": id, "state": state, "severity": r.Severity, "rule": r.Name,
+			"device_id": d.ID, "device": d.Name, "message": text})
+	}
 	msg := func(event, text string) Message {
 		return Message{Event: event, Severity: r.Severity, Rule: r.Name, Device: d.Name, Serial: d.Serial, Text: text, At: now}
 	}
@@ -691,6 +700,7 @@ func (s *Service) apply(ctx context.Context, r Rule, d *inventory.Device, conds 
 				return nil, err
 			}
 			notes = append(notes, pending{id, r, msg("opened", c.message)})
+			liveEvent(id, "open", c.message)
 		case err != nil:
 			return nil, err
 		default:
@@ -721,12 +731,19 @@ func (s *Service) apply(ctx context.Context, r Rule, d *inventory.Device, conds 
 			return nil, err
 		}
 		notes = append(notes, pending{0, r, msg("resolved", "Resolved: "+text)})
+		liveEvent(id, "resolved", text)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return notes, tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	for _, e := range live {
+		events.Publish(events.Alert, "", e)
+	}
+	return notes, nil
 }
 
 func (s *Service) notify(ctx context.Context, notes []pending) {

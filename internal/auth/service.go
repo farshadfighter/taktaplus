@@ -180,8 +180,19 @@ func (s *Service) Login(ctx context.Context, username, password, ip, userAgent s
 	return token, sess, nil
 }
 
-// Authenticate resolves a session token, enforcing idle and absolute expiry.
+// Authenticate resolves a session token, enforcing idle and absolute expiry,
+// and marks the session active.
 func (s *Service) Authenticate(ctx context.Context, token string) (Session, error) {
+	return s.authenticate(ctx, token, true)
+}
+
+// Peek is Authenticate without marking the session active, for the live
+// event stream: an open tab alone must not defeat the idle timeout.
+func (s *Service) Peek(ctx context.Context, token string) (Session, error) {
+	return s.authenticate(ctx, token, false)
+}
+
+func (s *Service) authenticate(ctx context.Context, token string, touch bool) (Session, error) {
 	if token == "" {
 		return Session{}, ErrNoSession
 	}
@@ -208,8 +219,10 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 		_, _ = s.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id)
 		return Session{}, ErrNoSession
 	}
-	if _, err := s.db.Exec(ctx, `UPDATE sessions SET last_seen_at = $2 WHERE id = $1`, id, now); err != nil {
-		return Session{}, err
+	if touch {
+		if _, err := s.db.Exec(ctx, `UPDATE sessions SET last_seen_at = $2 WHERE id = $1`, id, now); err != nil {
+			return Session{}, err
+		}
 	}
 	return sess, nil
 }
