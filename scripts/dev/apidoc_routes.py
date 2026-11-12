@@ -48,8 +48,9 @@ for ln in lines:
     if plus: loop = None
 
 def words(name):
+    if name == 'openAPI': return 'OpenAPI document'
     name = re.sub(r'^handle', '', name)
-    name = {'MFA': 'verify MFA code', 'MFASetup': 'start MFA setup', 'MFAEnable': 'enable MFA', 'Me': 'current user', 'Login': 'log in', 'Logout': 'log out', 'AuditList': 'list audit log'}.get(name, name)
+    name = {'MFA': 'verify MFA code', 'MFASetup': 'start MFA setup', 'MFAEnable': 'enable MFA', 'Me': 'current user', 'Login': 'log in', 'Logout': 'log out', 'AuditList': 'list audit log', 'openAPI': 'OpenAPI document'}.get(name, name)
     w = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', name).replace('_', ' ').lower()
     return w[:1].upper() + w[1:]
 
