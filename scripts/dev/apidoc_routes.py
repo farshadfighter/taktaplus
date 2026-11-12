@@ -1,5 +1,5 @@
 # Generates the OpenAPI route table from a chi server.go.
-# usage: routes.py SERVER_GO API_DIR PKG OUT RECEIVER
+# usage: apidoc_routes.py SERVER_GO API_DIR PKG OUT
 import re, glob, sys
 server, apidir, pkg, out = sys.argv[1:5]
 src = open(server).read()
@@ -29,8 +29,13 @@ for ln in lines:
     m = re.match(r'r(?:\.With\(([^)]*\)?)\))?\.(Get|Post|Put|Delete|Patch)\("([^"]*)"(\+a)?, ?(.*)', l)
     if not m: continue
     mw, method, path, plus, handler = m.groups()
+    wm = re.match(r's\.\w+\((?:[^()]*,\s*)?s\.(\w+)\)', handler)   # s.wrap(..., s.handler)
     hm = re.match(r's\.(\w+)', handler); pm = re.match(r'pr\["(\w+)"\]', handler)
-    hname = hm.group(1) if hm else (pm.group(1) if pm else ('version' if 'version' in path else 'inline'))
+    if wm: hname = wm.group(1)
+    elif hm: hname = hm.group(1)
+    elif pm: hname = pm.group(1)
+    elif 'version' in path: hname = 'version'
+    else: hname = None  # inline function: named from the method and path
     perm = ''; access = 'Session'
     if mw is None:
         access = 'Public'
@@ -41,6 +46,13 @@ for ln in lines:
         elif mw in perms: perm = perms[mw]
         if mw in panelvars: access = 'PanelOnly'
     if hname in reauth: access = 'PanelOnly'
+    if hname is None:
+        verb = {'GET': 'get', 'POST': 'post', 'PUT': 'update', 'DELETE': 'delete', 'PATCH': 'update'}[method.upper()]
+        segs = [x for x in path.strip('/').split('/') if not x.startswith('{')]
+        hname = verb + '_' + '_'.join(segs)
+    if mw is None and re.match(r's\.(portal|resellerCustomerUsers)\(', handler): access = 'Session'  # portal users
+    if mw is None and re.match(r'/(activate|heartbeat|repo/)', path): access = 'Install'
+    if mw == 'panelOnly': access = 'PanelOnly'
     paths = [(path + a, a) for a in loop] if plus else [(path, None)]
     for p, a in paths:
         h = a if a else hname
