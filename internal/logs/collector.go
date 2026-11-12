@@ -324,7 +324,14 @@ func (c *Collector) serveStream(ln net.Listener) {
 			if ta, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
 				ip, _ = netip.AddrFromSlice(ta.IP)
 			}
-			c.readStream(conn, ip.Unmap())
+			ip = ip.Unmap()
+			// Only device addresses (and trusted networks) may hold a
+			// connection; otherwise anyone could use up every slot.
+			if !c.knownSource(ip) {
+				c.reject("", ip, DropUntrusted, c.now())
+				return
+			}
+			c.readStream(conn, ip)
 		}()
 	}
 }
@@ -438,6 +445,30 @@ func (c *Collector) tick(now time.Time) {
 		}
 	}
 	c.secAt = sec
+}
+
+// knownSource reports whether ip belongs to a registered device or a
+// trusted network.
+func (c *Collector) knownSource(ip netip.Addr) bool {
+	if !ip.IsValid() {
+		return false
+	}
+	c.devMu.RLock()
+	for _, d := range c.devices {
+		if slices.Contains(d.hostIPs, ip) {
+			c.devMu.RUnlock()
+			return true
+		}
+	}
+	c.devMu.RUnlock()
+	if c.trusted != nil {
+		for _, p := range c.trusted() {
+			if p.Contains(ip) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (c *Collector) trustedSource(d deviceEntry, ip netip.Addr) bool {

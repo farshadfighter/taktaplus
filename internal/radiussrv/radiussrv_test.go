@@ -69,7 +69,7 @@ func TestRADIUSChallenge(t *testing.T) {
 	clients, _ := srv.ListClients(ctx)
 	secret := []byte(clients[0].secret)
 	cfg, err := srv.FortiGateConfig(ctx, id, "10.0.0.5", "")
-	if err != nil || !contains(cfg, `set server "10.0.0.5"`) || !contains(cfg, "set auth-type pap") {
+	if err != nil || !contains(cfg, "set server 10.0.0.5") || !contains(cfg, "set auth-type pap") {
 		t.Fatalf("config = %q %v", cfg, err)
 	}
 

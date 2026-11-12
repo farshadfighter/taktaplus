@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -185,6 +187,13 @@ func TestCollectorAndQueries(t *testing.T) {
 	fmt.Fprintf(c1, "devid=FGUNKNOWN type=traffic srcip=1.1.1.1\n") // not registered
 	fmt.Fprintf(c1, "just noise\n")
 	c1.Close()
+	// An address that is no device's: the connection is closed at once.
+	c4 := dialFrom("127.0.0.4")
+	_ = c4.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if _, err := c4.Read(make([]byte, 1)); err == nil || errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("connection from an unknown address stayed open: %v", err)
+	}
+	c4.Close()
 
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -201,8 +210,9 @@ func TestCollectorAndQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := col.Stats()
-	if st.Accepted != uint64(len(lines))+2 || st.Dropped[DropUntrusted] != 1 || st.Dropped[DropUnlicensed] != 1 ||
-		st.Dropped[DropUnknown] != 1 || st.Dropped[DropUnparsable] != 1 || len(st.Rejected) != 3 || st.EPS <= 0 {
+	// Untrusted: FGLOG002 from the wrong address, and the connection from 127.0.0.4.
+	if st.Accepted != uint64(len(lines))+2 || st.Dropped[DropUntrusted] != 2 || st.Dropped[DropUnlicensed] != 1 ||
+		st.Dropped[DropUnknown] != 1 || st.Dropped[DropUnparsable] != 1 || len(st.Rejected) != 4 || st.EPS <= 0 {
 		t.Fatalf("stats = %+v", st)
 	}
 
