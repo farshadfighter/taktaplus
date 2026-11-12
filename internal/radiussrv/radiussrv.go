@@ -22,6 +22,7 @@ import (
 	"layeh.com/radius"
 	"layeh.com/radius/rfc2865"
 
+	"github.com/farshadfighter/taktaplus/internal/fortiosconf"
 	"github.com/farshadfighter/taktaplus/internal/otp"
 	"github.com/farshadfighter/taktaplus/internal/secretbox"
 	"github.com/farshadfighter/taktaplus/internal/settings"
@@ -224,16 +225,16 @@ func (s *Server) FortiGateConfig(ctx context.Context, deviceID int64, serverIP, 
 end
 config user radius
     edit "TaktaPlus"
-        set server "%s"
+        set server %s
         set secret %s
         set auth-type pap
     next
 end
 config user group
-    edit "%s"
+    edit %s
         set member "TaktaPlus"
     next
-end`, serverIP, c.secret, group), nil
+end`, fortiosconf.Quote(serverIP), fortiosconf.Quote(c.secret), fortiosconf.Quote(group)), nil
 	}
 	return "", otpInvalid("unknown device")
 }
