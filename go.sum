@@ -11,6 +11,8 @@ github.com/emersion/go-smtp v0.25.0 h1:krfiHrme2JbJYDh0DGuSRbvPpbnQTH/v9CIfPincl
 github.com/emersion/go-smtp v0.25.0/go.mod h1:ZtRRkbTyp2XTHCA+BmyTFTrj8xY4I+b4McvHxCU2gsQ=
 github.com/farshadfighter/taktaplus-lic v0.0.0-20261111230547-f4e4227c061f h1:xUA9K4c/VOZekcSvpjz8X+5fmYrUvuUKcDvKUrT//Wk=
 github.com/farshadfighter/taktaplus-lic v0.0.0-20261111230547-f4e4227c061f/go.mod h1:uKCcbQ0j97/3B8N4Cgi7gcAP9PHVdQM1+SbHvQIwlWU=
+github.com/farshadfighter/taktaplus-lic v0.0.0-20261112063504-7a4985820631 h1:JjKyfvuM6pAMGJbqHY0AtdUSHMvh+buNHKxlUBCPrSk=
+github.com/farshadfighter/taktaplus-lic v0.0.0-20261112063504-7a4985820631/go.mod h1:uKCcbQ0j97/3B8N4Cgi7gcAP9PHVdQM1+SbHvQIwlWU=
 github.com/go-asn1-ber/asn1-ber v1.5.8 h1:H9AZkK22UOmfX8J84ubyaZxKJZ3FMHVwn8swoMML7iQ=
 github.com/go-asn1-ber/asn1-ber v1.5.8/go.mod h1:hEBeB/ic+5LoWskz+yKT7vGhhPYkProFKoKdwZRWMe0=
 github.com/go-chi/chi/v5 v5.5.0 h1:xdKQ1dJmVJsmgahrXSKhUx8NyVPzpwdlyrrQFpMPJgg=

@@ -29,6 +29,10 @@ func (s *srv) backupError(w http.ResponseWriter, r *http.Request, err error) {
 // reauth checks the password and TOTP code sent with a sensitive request.
 func (s *srv) reauth(w http.ResponseWriter, r *http.Request, password, code string) bool {
 	sess, _ := sessionFrom(r.Context())
+	if sess.Token != nil {
+		writeError(w, http.StatusForbidden, errPanelOnly)
+		return false
+	}
 	err := s.auth.Reauthenticate(r.Context(), sess.User.ID, password, code)
 	switch {
 	case err == nil:
