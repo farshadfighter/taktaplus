@@ -11,6 +11,8 @@ import (
 
 // Tag descriptions shown in the API documentation.
 var apiTags = map[string]string{
+	"alert-rules": "قوانین هشدار", "backup-policies": "سیاست‌های بکاپ", "channels": "کانال‌های اعلان",
+	"package-sources": "منابع پکیج", "restores": "ریستور",
 	"auth": "ورود به پنل", "me": "کاربر فعلی", "audit": "لاگ ممیزی", "tokens": "توکن‌های API", "users": "کاربران پنل",
 	"license": "لایسنس", "devices": "تجهیزات", "groups": "گروه‌های دستگاه", "variables": "متغیرهای قالب", "alerts": "هشدارها",
 	"backups": "بکاپ و ریستور", "packages": "پکیج‌ها و منابع", "sources": "منابع پکیج", "deployments": "استقرار",
