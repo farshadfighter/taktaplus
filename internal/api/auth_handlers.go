@@ -36,8 +36,12 @@ func nextStep(sess auth.Session) string {
 
 func (s *srv) audit(r *http.Request, sess auth.Session, action, objType, objID string, details map[string]any) {
 	id := sess.User.ID
+	source := audit.SourcePanel
+	if sess.Token != nil {
+		source = audit.SourceAPI
+	}
 	err := audit.Log(r.Context(), s.db, audit.Entry{
-		Source: audit.SourcePanel, ActorID: &id, Actor: sess.User.Username, IP: clientIP(r),
+		Source: source, ActorID: &id, Actor: sess.User.Username, IP: clientIP(r),
 		Action: action, ObjectType: objType, ObjectID: objID, Details: details,
 	})
 	if err != nil {

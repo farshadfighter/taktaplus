@@ -24,6 +24,7 @@ function NavMenu({ onNavigate, openAlerts, pending }: { onNavigate?: () => void;
     ...(can(user, 'license.read') ? [link('/license', 'لایسنس')] : []),
     ...(can(user, 'audit.read') ? [link('/audit', 'لاگ ممیزی')] : []),
     ...(can(user, 'settings.manage') ? [link('/system', 'بکاپ و ارتقای سیستم')] : []),
+    link('/api-docs', 'مستند API'),
   ]
   const items = [
     link('/', 'داشبورد'),

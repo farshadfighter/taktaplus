@@ -123,6 +123,7 @@ func New(d Deps) http.Handler {
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/openapi.json", s.openAPI)
 		r.Get("/version", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]string{
 				"version": buildinfo.Version, "commit": buildinfo.Commit, "date": buildinfo.Date,
@@ -153,7 +154,11 @@ func New(d Deps) http.Handler {
 			r.With(requireUser).Get("/me", s.handleMe)
 			r.With(requirePerm(auth.PermAuditRead)).Get("/audit", s.handleAuditList)
 
-			users := requirePerm(auth.PermUsersManage)
+			// User and token management stays in the panel.
+			users := func(h http.Handler) http.Handler { return panelOnly(requirePerm(auth.PermUsersManage)(h)) }
+			r.With(users).Get("/tokens", s.listTokens)
+			r.With(users).Post("/tokens", s.createToken)
+			r.With(users).Delete("/tokens/{id}", s.revokeToken)
 			r.With(users).Get("/users", s.listUsers)
 			r.With(users).Post("/users", s.createUser)
 			r.With(users).Put("/users/{id}", s.updateUser)
