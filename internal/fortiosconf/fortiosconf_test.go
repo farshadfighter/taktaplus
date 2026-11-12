@@ -1,6 +1,9 @@
 package fortiosconf
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 const sample = `#config-version=FG100F-7.4.4-FW-build2662:opmode=0:vdom=0
 config system global
@@ -143,5 +146,16 @@ end
 	}
 	if Quote("all") != "all" || Quote("FGT HQ") != `"FGT HQ"` || Quote(`a"b`) != `"a\"b"` {
 		t.Fatal("quote")
+	}
+}
+
+func TestQuoteControlCharacters(t *testing.T) {
+	// A carriage return would end the CLI command and start another.
+	got := Quote("x\r\nend\rexecute factoryreset\n")
+	if strings.ContainsAny(got, "\r\n") {
+		t.Fatalf("Quote kept a line break: %q", got)
+	}
+	if got != `"x  end execute factoryreset "` {
+		t.Fatalf("Quote = %q", got)
 	}
 }

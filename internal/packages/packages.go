@@ -161,7 +161,7 @@ func (s *Service) Path(sha string) string { return filepath.Join(s.dir, sha[:2],
 
 // Open returns a stored file.
 func (s *Service) Open(sha string) (*os.File, error) {
-	if len(sha) != 64 {
+	if b, err := hex.DecodeString(sha); err != nil || len(b) != 32 {
 		return nil, ErrNotFound
 	}
 	f, err := os.Open(s.Path(sha))

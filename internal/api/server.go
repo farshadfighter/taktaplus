@@ -15,6 +15,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/farshadfighter/taktaplus-lic/pkg/ratelimit"
+
 	"github.com/farshadfighter/taktaplus/internal/alerts"
 	"github.com/farshadfighter/taktaplus/internal/auth"
 	"github.com/farshadfighter/taktaplus/internal/backup"
@@ -148,10 +150,13 @@ func New(d Deps) http.Handler {
 
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(120*time.Second), csrfGuard, s.loadSession)
-			r.Post("/auth/login", s.handleLogin)
-			r.Post("/auth/mfa", s.handleMFA)
-			r.Post("/auth/mfa/setup", s.handleMFASetup)
-			r.Post("/auth/mfa/enable", s.handleMFAEnable)
+			// Password and code guessing: 20 attempts per address and minute
+			// on top of the per-account lockout.
+			authLimit := ratelimit.New(20, time.Minute).Middleware
+			r.With(authLimit).Post("/auth/login", s.handleLogin)
+			r.With(authLimit).Post("/auth/mfa", s.handleMFA)
+			r.With(authLimit).Post("/auth/mfa/setup", s.handleMFASetup)
+			r.With(authLimit).Post("/auth/mfa/enable", s.handleMFAEnable)
 			r.Post("/auth/logout", s.handleLogout)
 			r.With(requireUser).Get("/me", s.handleMe)
 			r.With(requirePerm(auth.PermAuditRead)).Get("/audit", s.handleAuditList)
@@ -369,6 +374,9 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
+		if r.TLS != nil {
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
 		if !isAPI(r.URL.Path) {
 			h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'")
 		}

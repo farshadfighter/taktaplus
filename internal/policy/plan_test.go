@@ -168,3 +168,20 @@ end
 		t.Fatalf("vdom CLI = %q", p.CLI)
 	}
 }
+
+func TestNoCLIInjection(t *testing.T) {
+	if err := ValidatePolicies([]Policy{{ID: 1, Name: "ok\rexecute reboot", SrcZones: []string{"lan"}, DstZones: []string{"wan"},
+		SrcAddr: []string{"all"}, DstAddr: []string{"all"}, Service: []string{"ALL"}, Schedule: "always", Action: "accept"}}); err == nil {
+		t.Fatal("a policy name with a carriage return was accepted")
+	}
+	if err := validName("obj\rexecute reboot"); err == nil {
+		t.Fatal("an object name with a carriage return was accepted")
+	}
+	e := entry{name: "1"}
+	e.set("comments", "note\rexecute reboot")
+	var b strings.Builder
+	e.cli(&b)
+	if strings.Contains(b.String(), "\r") {
+		t.Fatalf("CLI carries a carriage return: %q", b.String())
+	}
+}
