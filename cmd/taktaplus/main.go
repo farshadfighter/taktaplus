@@ -24,6 +24,7 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/pkg/licformat"
 	"github.com/farshadfighter/taktaplus-lic/pkg/manifest"
 	"github.com/farshadfighter/taktaplus/internal/alerts"
+	"github.com/farshadfighter/taktaplus/internal/events"
 
 	"github.com/farshadfighter/taktaplus/internal/api"
 	"github.com/farshadfighter/taktaplus/internal/auth"
@@ -297,6 +298,9 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	complianceSvc := compliance.New(pool, inv, backups, scriptSvc, changeSvc, log.With("component", "compliance"))
 	complianceSvc.RegisterWidgets()
 	backups.OnStored(func(deviceID, _ int64) { complianceSvc.Queue(deviceID) })
+	backups.OnStored(func(deviceID, backupID int64) {
+		events.Publish(events.Backup, "devices.read", map[string]any{"device_id": deviceID, "id": backupID})
+	})
 	alertSvc.SetComplianceSource(complianceSvc)
 	go complianceSvc.Run(ctx)
 	reports.RegisterSystemWidgets(pool, inv, guard)
@@ -314,6 +318,14 @@ func runAPI(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		MasterKey: os.Getenv("TAKTAPLUS_MASTER_KEY"), PgDump: cfg.PgDump}, log.With("component", "system"))
 	systemSvc.SetNotifier(func(ctx context.Context, ch int64, to []string, subject, body string) error {
 		return alertSvc.Deliver(ctx, ch, to, subject, body, nil)
+	})
+	systemSvc.SetListener(func(kind string, data map[string]any) {
+		typ := events.Upgrade
+		if kind == "backup" {
+			typ = events.Backup
+			data["system"] = true
+		}
+		events.Publish(typ, "settings.manage", data)
 	})
 	if err := systemSvc.Recover(ctx); err != nil {
 		return err

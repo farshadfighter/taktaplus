@@ -18,7 +18,7 @@ var apiTags = map[string]string{
 	"backups": "بکاپ و ریستور", "packages": "پکیج‌ها و منابع", "sources": "منابع پکیج", "deployments": "استقرار",
 	"changes": "درخواست‌های تغییر", "maintenance": "پنجره‌ها و تأیید", "scripts": "اسکریپت‌های CLI", "firmware": "فرم‌ور",
 	"otp": "احراز هویت دو مرحله‌ای", "sms": "پیامک", "logs": "لاگ و تحلیل", "reports": "گزارش‌ها", "compliance": "قالب و انطباق",
-	"policy": "Policy Packageها", "system": "بکاپ و ارتقای سیستم", "version": "نسخه", "openapi": "همین مستند",
+	"policy": "Policy Packageها", "system": "بکاپ و ارتقای سیستم", "version": "نسخه", "openapi": "همین مستند", "events": "رویدادهای زنده (SSE)",
 }
 
 var (

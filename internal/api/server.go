@@ -142,6 +142,8 @@ func New(d Deps) http.Handler {
 			r.With(lr).Get("/logs/export.csv", s.logExport)
 			r.With(lr).Get("/logs/dashboard", s.logDashboard)
 			r.With(lr).Get("/reports/runs/{id}/files/{format}", s.downloadReport)
+			// Live events: a long-lived stream.
+			r.With(requireUser).Get("/events", s.liveEvents)
 		})
 
 		r.Group(func(r chi.Router) {
