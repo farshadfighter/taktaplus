@@ -6,6 +6,7 @@ import { useCan } from '../auth'
 import { LineChart, chartColors } from '../chart'
 import { daysUntil, faDate, faDateTime, faNum } from '../format'
 import { Mono, PageHeader, Usage, bytesText, kindLabel, licenseTag, severityTag, statusTag, uptimeText, useReauth } from '../ui'
+import { useLiveRefresh } from '../live'
 import { useFetch } from '../useFetch'
 import { BackupTable } from './Backups'
 
@@ -99,9 +100,12 @@ export default function DeviceDetail() {
   const { message } = AntApp.useApp()
   const canWrite = useCan('devices.write')
   const canBackup = useCan('backups.run')
-  const { data, error, loading, reload, setData } = useFetch<{ device: Device; status: DeviceStatus | null }>(`/devices/${id}`)
+  const { data, error, loading, reload, refresh: refreshDevice, setData } = useFetch<{ device: Device; status: DeviceStatus | null }>(`/devices/${id}`)
   const backups = useFetch<{ items: Backup[] }>(`/backups?device=${id}`)
   const alerts = useFetch<{ items: AlertRow[] }>(`/alerts?device=${id}`)
+  useLiveRefresh(['device'], refreshDevice, (d) => String(d.id) === id)
+  useLiveRefresh(['backup'], backups.refresh, (d) => String(d.device_id) === id)
+  useLiveRefresh(['alert'], alerts.refresh, (d) => d.device_id === undefined || String(d.device_id) === id)
   const [busy, setBusy] = useState<string | null>(null)
   const reauth = useReauth()
 

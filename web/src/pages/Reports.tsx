@@ -8,6 +8,7 @@ import { useCan } from '../auth'
 import { faDateTime, faNum } from '../format'
 import { DeviceSelect, useDevices } from '../logui'
 import { PageHeader, bytesText } from '../ui'
+import { useLiveRefresh } from '../live'
 import { useFetch } from '../useFetch'
 
 const weekdays = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه']
@@ -193,6 +194,7 @@ export default function Reports() {
   const templates = useFetch<{ items: ReportTemplate[] }>('/reports/templates')
   const schedules = useFetch<{ items: ReportSchedule[]; timezone: string }>('/reports/schedules')
   const runs = useFetch<{ items: ReportRun[] }>('/reports/runs?limit=50')
+  useLiveRefresh(['report'], runs.refresh)
   const catalog = useFetch<LogCatalog>('/logs/catalog')
   const { names } = useDevices()
   const [runTpl, setRunTpl] = useState<ReportTemplate | null>(null)

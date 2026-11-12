@@ -5,6 +5,7 @@ import { api, type AlertRow, type Channel, type Group, type Rule } from '../api'
 import { useCan } from '../auth'
 import { faDateTime, faNum } from '../format'
 import { PageHeader, severityTag } from '../ui'
+import { useLiveRefresh } from '../live'
 import { useFetch } from '../useFetch'
 
 const ruleKinds: Record<string, { label: string; unit?: string }> = {
@@ -158,6 +159,7 @@ export default function Alerts() {
   const rules = useFetch<{ items: Rule[] }>('/alert-rules')
   const channels = useFetch<{ items: Channel[] }>(canManage ? '/channels' : null)
   const groups = useFetch<{ items: Group[] }>('/groups')
+  useLiveRefresh(['alert'], alerts.refresh)
   const [rule, setRule] = useState<Partial<Rule> | null>(null)
   const [channel, setChannel] = useState<Partial<Channel> | null>(null)
   const open = alerts.data?.open ?? {}

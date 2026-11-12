@@ -5,6 +5,7 @@ import { api, type Backup, type DeviceRow, type Group, type Policy, type Restore
 import { useCan } from '../auth'
 import { faDateTime, faNum } from '../format'
 import { Mono, PageHeader, bytesText } from '../ui'
+import { useLiveRefresh } from '../live'
 import { useFetch } from '../useFetch'
 
 export const reasonLabel: Record<string, string> = {
@@ -116,6 +117,7 @@ export default function Backups() {
   const restores = useFetch<{ items: RestoreJob[] }>('/restores')
   const devices = useFetch<{ items: DeviceRow[] }>('/devices')
   const groups = useFetch<{ items: Group[] }>('/groups')
+  useLiveRefresh(['backup'], backups.refresh, (d) => !d.system)
   const [editing, setEditing] = useState<Partial<Policy> | null>(null)
   const scopeText = (p: Policy) =>
     p.device_id ? `دستگاه: ${devices.data?.items.find((d) => d.id === p.device_id)?.name ?? p.device_id}`

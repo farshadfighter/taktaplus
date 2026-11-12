@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
 
-// useFetch loads a GET endpoint and exposes a reload function.
+// useFetch loads a GET endpoint and exposes reload (with the loading state)
+// and refresh (in the background, for live updates).
 export function useFetch<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -20,9 +21,19 @@ export function useFetch<T>(path: string | null) {
     }
   }, [path])
 
+  const refresh = useCallback(async () => {
+    if (path === null) return
+    try {
+      setData(await api.get<T>(path))
+      setError(null)
+    } catch {
+      // keep what is shown; the next event or reload tries again
+    }
+  }, [path])
+
   useEffect(() => {
     void reload()
   }, [reload])
 
-  return { data, error, loading, reload, setData }
+  return { data, error, loading, reload, refresh, setData }
 }

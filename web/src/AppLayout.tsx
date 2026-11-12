@@ -3,6 +3,7 @@ import { Avatar, Badge, Button, Drawer, Grid, Layout, Menu, Typography } from 'a
 import { Link, Outlet, useLocation } from 'react-router'
 import { useAuth, can } from './auth'
 import { brand } from './theme'
+import { LiveProvider, useLiveRefresh, useLiveStatus } from './live'
 import { useFetch } from './useFetch'
 import type { LicenseInfo } from './api'
 import { faNum } from './format'
@@ -98,7 +99,12 @@ function LicenseFoot({ info }: { info: LicenseInfo | null }) {
 }
 
 export default function AppLayout() {
+  return <LiveProvider><Shell /></LiveProvider>
+}
+
+function Shell() {
   const { user, logout } = useAuth()
+  const live = useLiveStatus()
   const screens = Grid.useBreakpoint()
   const [open, setOpen] = useState(false)
   const mobile = !screens.lg
@@ -107,6 +113,8 @@ export default function AppLayout() {
   const openAlerts = Object.values(alerts.data?.open ?? {}).reduce((a, b) => a + b, 0)
   const changes = useFetch<{ items: unknown[] }>('/changes?status=pending')
   const pending = changes.data?.items.length ?? 0
+  useLiveRefresh(['alert'], alerts.refresh)
+  useLiveRefresh(['change'], changes.refresh)
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -126,6 +134,10 @@ export default function AppLayout() {
         <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingInline: 24, borderBottom: '1px solid #EEE' }}>
           {mobile ? <Button onClick={() => setOpen(true)}>منو</Button> : <span />}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }} title={live ? 'به‌روزرسانی زنده برقرار است' : 'در حال اتصال برای به‌روزرسانی زنده…'}>
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, marginInlineEnd: 6, background: live ? '#2E7D32' : '#BBB' }} />
+              {live ? 'زنده' : 'در حال اتصال'}
+            </Typography.Text>
             <Avatar style={{ background: brand.primary }}>{user?.name.slice(0, 1)}</Avatar>
             <div style={{ lineHeight: 1.4 }}>
               <div style={{ fontWeight: 600 }}>{user?.name}</div>
