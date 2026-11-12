@@ -22,6 +22,8 @@ for ln in lines:
     l = ln.strip()
     m = re.match(r'(\w+) := requirePerm\(auth\.(\w+)\)', l)
     if m: perms[m.group(1)] = m.group(2); continue
+    m = re.match(r'(\w+), (\w+) := requirePerm\(auth\.(\w+)\), requirePerm\(auth\.(\w+)\)', l)
+    if m: perms[m.group(1)] = m.group(3); perms[m.group(2)] = m.group(4); continue
     m = re.match(r'(\w+) := func\(h http\.Handler\) http\.Handler \{ return panelOnly\(requirePerm\(auth\.(\w+)\)\(h\)\) \}', l)
     if m: perms[m.group(1)] = m.group(2); panelvars.add(m.group(1)); continue
     m = re.match(r'for _, a := range \[\]string\{(.*)\} \{', l)
