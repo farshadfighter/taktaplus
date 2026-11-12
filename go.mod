@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/emersion/go-smtp v0.25.0
-	github.com/farshadfighter/taktaplus-lic v0.0.0-20261026115923-e4a745d8b691
+	github.com/farshadfighter/taktaplus-lic v0.0.0-20261111230547-f4e4227c061f
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/jackc/pgx/v5 v5.11.0

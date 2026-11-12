@@ -34,6 +34,7 @@ import (
 	"github.com/farshadfighter/taktaplus/internal/scripts"
 	"github.com/farshadfighter/taktaplus/internal/sms"
 	"github.com/farshadfighter/taktaplus/internal/smtpgw"
+	"github.com/farshadfighter/taktaplus/internal/system"
 )
 
 // Deps are the server's collaborators.
@@ -64,6 +65,7 @@ type Deps struct {
 	SyslogServer string // address devices send logs to, suggested in the UI
 	Compliance   *compliance.Service
 	Policy       *policy.Service
+	System       *system.Service
 }
 
 type srv struct {
@@ -92,6 +94,7 @@ type srv struct {
 	syslogServer string
 	compliance   *compliance.Service
 	policy       *policy.Service
+	system       *system.Service
 }
 
 // New returns the root HTTP handler.
@@ -100,7 +103,7 @@ func New(d Deps) http.Handler {
 		inv: d.Inventory, alerts: d.Alerts, mon: d.Monitor, backups: d.Backups, pkgs: d.Packages, tmpDir: d.TmpDir,
 		changes: d.Changes, scripts: d.Scripts, firmware: d.Firmware,
 		otp: d.OTP, sms: d.SMS, radius: d.Radius, smtpgw: d.Gateway, radiusAddr: d.RadiusAddr, smtpAddr: d.SMTPAddr,
-		logs: d.Logs, reports: d.Reports, syslogServer: d.SyslogServer, compliance: d.Compliance, policy: d.Policy}
+		logs: d.Logs, reports: d.Reports, syslogServer: d.SyslogServer, compliance: d.Compliance, policy: d.Policy, system: d.System}
 	if s.tmpDir == "" {
 		s.tmpDir = os.TempDir()
 	}
@@ -309,6 +312,17 @@ func New(d Deps) http.Handler {
 			r.With(cm).Put("/compliance/rules/{id}", s.saveComplianceRule)
 			r.With(cm).Delete("/compliance/rules/{id}", s.deleteComplianceRule)
 
+			if s.system != nil {
+				sm := requirePerm(auth.PermSettings)
+				r.With(sm).Get("/system", s.systemOverview)
+				r.With(sm).Put("/system/backup/settings", s.saveSystemBackupSettings)
+				r.With(sm).Post("/system/backup/passphrase", s.setSystemBackupPassphrase)
+				r.With(sm).Post("/system/backup/sftp-test", s.testSystemSFTP)
+				r.With(sm).Post("/system/backup/run", s.startSystemBackup)
+				r.With(sm).Get("/system/backup/file", s.downloadSystemBackup)
+				r.With(sm).Post("/system/upgrades", s.uploadUpgrade)
+				r.With(sm).Delete("/system/upgrades/{id}", s.cancelUpgrade)
+			}
 			if s.policy != nil {
 				pm := requirePerm(auth.PermPolicy)
 				pr := s.policyRoutes()

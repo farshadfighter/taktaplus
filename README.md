@@ -50,6 +50,11 @@
 
 - **F4 — مدیریت متمرکز Policy (FortiGate، IPv4):** پایگاه آبجکت مشترک (Address، گروه، Service، Schedule، VIP، IP Pool) با نگاشت پویای مقدار برای هر دستگاه و پر کردن از الگو؛ نگاشت اینترفیس‌های منطقی (`lan`، `wan`، …) به پورت واقعی هر دستگاه؛ Policy Package با پیش‌نویس، قفل ویرایش، انتشار نسخه، تاریخچه و بازگشت؛ Import از دستگاه با ثبت تعارض آبجکت‌ها؛ پروفایل‌های امنیتی فقط با نام (بررسی وجود پیش از نصب)؛ پیش‌نمایش نصب برای هر دستگاه با فهرست عملیات و CLI؛ نصب با درخواست تغییر و تأیید، اجرای CLI روی SSH پس از بکاپ تازه و برگشت به همان بکاپ در صورت خطا؛ کشف تغییرات محلی از هر بکاپ و «پذیرفتن تغییر محلی» به پیش‌نویس؛ Hit هر Policy در ۳۰ روز از لاگ‌ها.
 
+فاز ۸:
+
+- **نصب و ارتقای آفلاین:** بسته‌ی امضاشده‌ی `taktaplus-x.y.z.tar.gz` (ایمیج‌های Docker، Compose و اسکریپت‌ها)؛ ارتقا از پنل یا CLI با بررسی امضا، نسخه‌ی پشتیبان دیتابیس و بکاپ کامل پیش از ارتقا و برگشت خودکار به نسخه‌ی قبل اگر نسخه‌ی جدید سالم بالا نیاید.
+- **بکاپ خود TaktaPlus:** دیتابیس، پوشه‌ی داده و کلید اصلی در یک فایل `.tpbak` رمزنگاری‌شده با عبارت عبور جدا؛ زمان‌بندی، نگهداری چند نسخه، کپی SFTP با Pin کلید میزبان، اعلان خطا و بازیابی با `restore.sh` روی همین یا سرور تازه.
+
 > درایورها بر اساس مستندات FortiOS/FortiWeb و با سرورهای شبیه‌سازی‌شده تست شده‌اند و باید روی دستگاه واقعی تأیید شوند؛ مسیرهای API فورتی‌وب (`/api/v2.0/...`) قطعیت کمتری دارند و بکاپ فورتی‌وب فعلاً از طریق SSH است. نصب سیگنیچر روی فورتی‌وب مثل بارگذاری در GUI با REST API انجام می‌شود؛ مسیر آن (`TAKTAPLUS_FORTIWEB_UPLOAD_PATH`، پیش‌فرض `/api/v2.0/system/maintenance.manualupdate`) باید با درخواستی که GUI هنگام بارگذاری می‌فرستد (در DevTools مرورگر) تطبیق داده شود. دستورهای `execute restore ips|av|image` فورتی‌گیت و پاسخ `y` به پرسش تأیید هم باید روی دستگاه واقعی تأیید شوند.
 
 ## تنظیمات
@@ -71,6 +76,7 @@
 | `TAKTAPLUS_CLICKHOUSE_URL` | ذخیره‌ساز لاگ، مثل `http://user:pass@clickhouse:8123/taktaplus`؛ خالی یعنی ماژول E غیرفعال |
 | `TAKTAPLUS_SYSLOG_UDP`, `TAKTAPLUS_SYSLOG_TCP`, `TAKTAPLUS_SYSLOG_TLS` | دریافت Syslog، پیش‌فرض `:5514` (UDP و TCP، در Compose روی 514) و `:6514` (TLS با همان گواهی پنل)؛ `off` برای غیرفعال کردن |
 | `TAKTAPLUS_TIMEZONE` | منطقه‌ی زمانی زمان‌بندی و تاریخ گزارش‌ها، پیش‌فرض `Asia/Tehran` |
+| `TAKTAPLUS_PG_DUMP`, `TAKTAPLUS_PG_RESTORE` | ابزار PostgreSQL برای بکاپ خود TaktaPlus، پیش‌فرض `pg_dump` و `pg_restore` (در ایمیج نصب است) |
 | `TAKTAPLUS_CHROMIUM` | مرورگر چاپ PDF؛ خالی یعنی جستجوی `chromium-browser`/`chromium` در PATH (در ایمیج Docker نصب است) |
 
 ساخت اولین مدیر: `TAKTAPLUS_ADMIN_PASSWORD=... taktaplus create-admin -username admin`
@@ -79,6 +85,35 @@
 
 - **FortiGate:** یک REST API Admin با پروفایل فقط‌خواندنی (و برای ریستور، دسترسی نوشتن به System) و Trusted Host آدرس TaktaPlus؛ یا کاربر SSH.
 - **FortiWeb:** کاربر ادمین برای REST API و کاربر SSH برای بکاپ.
+
+## نصب و ارتقا (بسته‌ی آفلاین)
+
+پیش‌نیاز: Linux x86_64 با Docker Engine و Compose plugin.
+
+```sh
+tar xzf taktaplus-1.2.0.tar.gz -C /tmp/tp && cd /tmp/tp
+sudo ./install.sh 10.0.0.5        # آدرسی که دستگاه‌ها با آن به سرور می‌رسند
+cd /opt/taktaplus && sudo docker compose exec api taktaplus create-admin -username admin
+```
+
+`install.sh` ایمیج‌ها را بارگذاری، امضا و Hash فایل‌ها را بررسی، کلید اصلی و رمزهای دیتابیس را در `/opt/taktaplus/.env` (دسترسی ۶۰۰) تولید و سرویس‌ها را اجرا می‌کند. `.env` را امن نگه دارید.
+
+- **ارتقا از پنل:** «سیستم ← بکاپ و ارتقای سیستم»، بارگذاری بسته (با رمز و کد دوباره). سرویس `updater` (تنها کانتینر با دسترسی به سوکت Docker، بدون شبکه) آن را اجرا می‌کند و مراحل و لاگ در همان صفحه دیده می‌شود.
+- **ارتقا از CLI:** `sudo /opt/taktaplus/scripts/upgrade.sh taktaplus-1.3.0.tar.gz`
+- **بکاپ دستی:** `sudo /opt/taktaplus/scripts/backup.sh` (عبارت عبور باید در پنل تعیین شده باشد)
+- **بازیابی:** `sudo /opt/taktaplus/scripts/restore.sh FILE.tpbak` — عبارت عبور را می‌پرسد، دیتابیس و داده را جایگزین و کلید اصلی را در `.env` برمی‌گرداند. برای سرور تازه، اول همان نسخه یا جدیدتر را نصب کنید.
+
+مراحل ارتقا: نسخه‌ی پشتیبان دیتابیس ← بکاپ رمزنگاری‌شده ← بارگذاری ایمیج‌ها ← تعویض Compose و نسخه ← راه‌اندازی ← بررسی `/healthz`. اگر نسخه‌ی جدید سالم بالا نیاید (یا مدام Restart شود)، Compose و ایمیج قبلی و دیتابیس پیش از ارتقا برمی‌گردند. لاگ‌های ClickHouse در بکاپ نیستند.
+
+### ساخت بسته‌ی انتشار
+
+```sh
+lictool keygen -kid rel-2026-01 -out ~/release-keys        # یک بار؛ کلید خصوصی را هرگز Commit نکنید
+cp ~/release-keys/rel-2026-01.pub internal/system/keys/    # فقط کلید عمومی
+TPLIC_KEY_PASSPHRASE=... scripts/release/build-bundle.sh 1.3.0 ~/release-keys/rel-2026-01.key 1.0.0
+```
+
+خروجی `dist/taktaplus-1.3.0.tar.gz` است؛ آرگومان سوم قدیمی‌ترین نسخه‌ای است که می‌تواند مستقیم به این نسخه ارتقا یابد. نسخه‌ای که کلید عمومی انتشار در آن نباشد بسته‌ای را نمی‌پذیرد.
 
 ## ساختار
 
@@ -89,7 +124,9 @@
 | `internal/license/keys` | کلیدهای **عمومی** مرجع لایسنس که داخل باینری قرار می‌گیرند |
 | `internal/api`, `internal/store`, `migrations` | HTTP، PostgreSQL و Migrationها |
 | `web/` | رابط وب (React + Ant Design، راست‌به‌چپ) |
-| `deploy/` | Docker Compose |
+| `internal/system`, `internal/system/keys` | بکاپ و ارتقای خود محصول (پیاده‌سازی مشترک در `taktaplus-lic/pkg/sysadmin`) و کلیدهای **عمومی** انتشار |
+| `deploy/` | Docker Compose توسعه؛ `deploy/bundle` فایل‌های بسته‌ی نصب (Compose تولید، `install.sh` و `scripts/`) |
+| `scripts/release` | ساخت و امضای بسته‌ی انتشار |
 
 ## توسعه
 

@@ -1,0 +1,94 @@
+# TaktaPlus production deployment, installed by install.sh into
+# $TAKTAPLUS_HOME (default /opt/taktaplus). Settings live in .env next to
+# this file; images come from the offline bundle (docker load).
+name: taktaplus
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: taktaplus
+      POSTGRES_PASSWORD: ${TAKTAPLUS_DB_PASSWORD:?}
+      POSTGRES_DB: taktaplus
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taktaplus"]
+      interval: 5s
+      retries: 20
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: taktaplus
+      CLICKHOUSE_PASSWORD: ${TAKTAPLUS_CH_PASSWORD:?}
+      CLICKHOUSE_DB: taktaplus
+    volumes:
+      - chdata:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: ${TAKTAPLUS_CH_NOFILE:-262144}
+        hard: ${TAKTAPLUS_CH_NOFILE:-262144}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      retries: 30
+
+  api:
+    image: taktaplus:${TAKTAPLUS_VERSION:?}
+    pull_policy: never
+    restart: unless-stopped
+    command: ["api"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      TAKTAPLUS_LISTEN: ":8443"
+      TAKTAPLUS_TLS_CERT: ${TAKTAPLUS_TLS_CERT:-}
+      TAKTAPLUS_TLS_KEY: ${TAKTAPLUS_TLS_KEY:-}
+      TAKTAPLUS_DATABASE_URL: postgres://taktaplus:${TAKTAPLUS_DB_PASSWORD}@postgres:5432/taktaplus?sslmode=disable
+      TAKTAPLUS_DATA_DIR: /var/lib/taktaplus
+      TAKTAPLUS_HOST_ROOT: /host
+      TAKTAPLUS_MASTER_KEY: ${TAKTAPLUS_MASTER_KEY:?}
+      TAKTAPLUS_COOKIE_SECURE: "true"
+      TAKTAPLUS_LICENSE_SERVER: ${TAKTAPLUS_LICENSE_SERVER:-}
+      TAKTAPLUS_FILESERVER_IP: ${TAKTAPLUS_FILESERVER_IP:?}
+      TAKTAPLUS_FTP_PUBLIC_PORT: "21"
+      TAKTAPLUS_CLICKHOUSE_URL: http://taktaplus:${TAKTAPLUS_CH_PASSWORD}@clickhouse:8123/taktaplus
+      TAKTAPLUS_TIMEZONE: ${TAKTAPLUS_TIMEZONE:-Asia/Tehran}
+    ports:
+      - "${TAKTAPLUS_HTTPS_PORT:-443}:8443"
+      - "69:6969/udp"
+      - "21:2121"
+      - "30000-30009:30000-30009"
+      - "1812:1812/udp"
+      - "25:2525"
+      - "514:5514/udp"
+      - "514:5514"
+      - "6514:6514"
+    volumes:
+      - ./data:/var/lib/taktaplus
+      - /etc/machine-id:/host/etc/machine-id:ro
+      - ${TAKTAPLUS_DMI_DIR:-/sys/class/dmi/id}:/host/sys/class/dmi/id:ro
+
+  # Applies upgrades uploaded in the panel. It is the only container with the
+  # Docker socket; it opens no port and has no network.
+  updater:
+    image: ${TAKTAPLUS_UPDATER_IMAGE:-docker:27-cli}
+    pull_policy: never
+    restart: unless-stopped
+    network_mode: none
+    working_dir: ${TAKTAPLUS_HOME:?}
+    entrypoint: ["sh", "scripts/updater.sh"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same path inside and out, so compose resolves ./data to the host path.
+      - ${TAKTAPLUS_HOME}:${TAKTAPLUS_HOME}
+
+volumes:
+  pgdata:
+  chdata:
